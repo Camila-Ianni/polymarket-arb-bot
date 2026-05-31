@@ -344,25 +344,36 @@ class BotOrchestrator:
         if self.arbitrage_engine:
             await self.arbitrage_engine.stop()
 
-        # Loguear métricas finales
-        print("\n" + "=" * 60)
-        print("📊 MÉTRICAS FINALES:")
+        # Loguear métricas finales crudas al log (archivo)
+        if self.arbitrage_engine:
+            logger.info(f"Engine Final Summary: {self.arbitrage_engine.get_engine_summary()}")
+        if self.risk_manager:
+            logger.info(f"Risk Final Summary: {self.risk_manager.get_risk_summary()}")
+
+        # UI HUD Console
+        width = 58
+        print("\n" + "╔" + "═" * width + "╗")
+        print("║" + " 📊 MÉTRICAS FINALES ".center(width) + "║")
+        print("╠" + "═" * width + "╣")
 
         if self.arbitrage_engine:
             summary = self.arbitrage_engine.get_engine_summary()
-            print("  [ENGINE]")
+            print("║" + "  [ENGINE]".ljust(width) + "║")
             for k, v in summary.items():
                 if isinstance(v, dict): continue
-                print(f"    {k.replace('_', ' ').title():<25}: {v}")
+                line = f"    {k.replace('_', ' ').title():<25}: {v}"
+                print("║" + line.ljust(width) + "║")
+            print("║" + " " * width + "║")
 
         if self.risk_manager:
             risk_summary = self.risk_manager.get_risk_summary()
-            print("  [RISK]")
+            print("║" + "  [RISK]".ljust(width) + "║")
             for k, v in risk_summary.items():
                 if isinstance(v, dict): continue
-                print(f"    {k.replace('_', ' ').title():<25}: {v}")
+                line = f"    {k.replace('_', ' ').title():<25}: {v}"
+                print("║" + line.ljust(width) + "║")
 
-        print("=" * 60)
+        print("╚" + "═" * width + "╝")
         print("✅ Apagado del sistema completado.")
         logger.info("Bot detenido correctamente")
 
