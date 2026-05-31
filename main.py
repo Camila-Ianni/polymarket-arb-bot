@@ -32,6 +32,7 @@ from models import OrderBookSnapshot
 
 from modules.arbitrage_engine import ArbitrageEngine, EngineState
 from modules.risk_manager import RiskManager
+from modules.polymarket_chainlink_feed import ChainlinkRTDSFeed, MarketTimer
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
@@ -67,6 +68,7 @@ class BotOrchestrator:
         self.polymarket_monitor: Optional[PolymarketMonitor] = None
         self.risk_manager: Optional[RiskManager] = None
         self.arbitrage_engine: Optional[ArbitrageEngine] = None
+        self.chainlink_feed: Optional[ChainlinkRTDSFeed] = None
 
         # Estado del orquestador
         self._running = False
@@ -108,6 +110,10 @@ class BotOrchestrator:
                 risk_manager=self.risk_manager,
             )
             logger.debug("Arbitrage Engine inicializado (Maker Mode)")
+
+            # 4. Chainlink RTDS Feed
+            self.chainlink_feed = ChainlinkRTDSFeed()
+            logger.debug("Chainlink RTDS Feed inicializado")
 
             logger.info("Componentes inicializados")
 
@@ -203,6 +209,9 @@ class BotOrchestrator:
                     if not token_id:
                         print(f"[{ts}] Esperando al próximo mercado de 5 min...")
                     else:
+                        if self.chainlink_feed and not self.chainlink_feed.market_timer:
+                            self.chainlink_feed.set_market_timer(MarketTimer(start_time=time.time()))
+                            
                         try:
                             # 1. Oráculo Nativo: Order Book del CLOB
                             ob = await client.get_order_book(token_id)
@@ -291,6 +300,9 @@ class BotOrchestrator:
         # 3. Iniciar Arbitrage Engine
         await self.arbitrage_engine.start()
 
+        # 4. Iniciar Chainlink Feed
+        await self.chainlink_feed.start()
+
         # Iniciar tareas de background
         self._running = True
         self._health_check_task = asyncio.create_task(self._health_check_loop())
@@ -339,6 +351,10 @@ class BotOrchestrator:
 
         # Detener componentes en orden inverso a inicialización
         logger.info("Deteniendo componentes...")
+
+        # Detener Feed primero para evitar nuevas señales
+        if self.chainlink_feed:
+            await self.chainlink_feed.stop()
 
         # 1. Detener Engine (primero para dejar de generar señales)
         if self.arbitrage_engine:
