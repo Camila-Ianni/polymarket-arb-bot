@@ -24,9 +24,15 @@ class DashboardRenderer:
             self._task.cancel()
 
     async def render_loop(self):
+        import logging
+        logger = logging.getLogger("polymarket_arb.dashboard")
         while self._running:
-            self._render()
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)
+            try:
+                self._render()
+            except Exception as e:
+                logger.error(f"Crash en render_loop: {e}", exc_info=True)
+            await asyncio.sleep(0.4)
 
     def _render(self):
         os.system('clear' if os.name == 'posix' else 'cls')
@@ -35,15 +41,16 @@ class DashboardRenderer:
         dry_run = getattr(self.orchestrator.config.execution, 'dry_run', True) if hasattr(self.orchestrator, 'config') else True
         dry_run_text = "ON" if dry_run else "OFF"
         
-        engine_state = "SHUTDOWN"
-        pnl = 0.0
-        wallet_balance = 0.0
+        engine_state = "INICIALIZANDO"
+        pnl = "0.00"
         
-        if self.orchestrator.arbitrage_engine:
-            engine_state = self.orchestrator.arbitrage_engine.state.name
+        if hasattr(self.orchestrator, 'arbitrage_engine') and self.orchestrator.arbitrage_engine:
+            engine_state_obj = getattr(self.orchestrator.arbitrage_engine, 'state', None)
+            engine_state = getattr(engine_state_obj, 'name', "INICIALIZANDO")
             
-        if self.orchestrator.risk_manager:
-            pnl = self.orchestrator.risk_manager._total_pnl_usd
+        if hasattr(self.orchestrator, 'risk_manager') and self.orchestrator.risk_manager:
+            pnl_val = getattr(self.orchestrator.risk_manager, '_total_pnl_usd', 0.0)
+            pnl = f"{pnl_val:.2f}"
             
         # Simulación de latencias (podrían leerse de metrics en el futuro)
         parse_ms = 0.12
@@ -63,7 +70,7 @@ class DashboardRenderer:
         lines.append("╠" + "═" * (width - 2) + "╣")
         
         # Métricas principales
-        metrics1 = f"  Wallet PnL : ${pnl:.2f} | Execution Mode: FOK (Maker)"
+        metrics1 = f"  Wallet PnL : ${pnl} | Execution Mode: FOK (Maker)"
         metrics2 = f"  Asset      : BTC/USD 5m | Strategy: Front-Running EIP-712"
         lines.append("║" + metrics1.ljust(width - 2) + "║")
         lines.append("║" + metrics2.ljust(width - 2) + "║")
