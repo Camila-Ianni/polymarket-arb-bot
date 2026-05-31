@@ -99,6 +99,12 @@ class BotOrchestrator:
         5. Polymarket Monitor (independiente)
         """
         logger.info("Inicializando componentes...")
+        
+        # 0. Dashboard Renderer primero para feedback inmediato
+        from modules.dashboard import DashboardRenderer
+        self.dashboard = DashboardRenderer(self)
+        self.dashboard.add_event("🟡 INICIALIZANDO Subsistemas...")
+        asyncio.create_task(self.dashboard.start())
 
         with latency_logger.measure("component_initialization"):
             # 1. Risk Manager
@@ -146,13 +152,10 @@ class BotOrchestrator:
             self.chainlink_feed.on_signal = _on_price_tick
             logger.debug("Execution Engine inicializado y conectado")
 
-            # 6. Dashboard Renderer
-            from modules.dashboard import DashboardRenderer
-            self.dashboard = DashboardRenderer(self)
             self.execution_engine.dashboard = self.dashboard
             # 7. Market Scanner
             from modules.market_scanner import MarketScanner
-            self.scanner = MarketScanner()
+            self.scanner = MarketScanner(dashboard=self.dashboard)
 
             logger.info("Componentes inicializados")
 
@@ -206,9 +209,10 @@ class BotOrchestrator:
                         issues.append("Polymarket Monitor: reconectando")
 
                 if self.arbitrage_engine:
-                    if self.arbitrage_engine.state == EngineState.ERROR:
+                    engine_state = getattr(self.arbitrage_engine, 'state', None)
+                    if getattr(engine_state, 'name', '') == 'ERROR' or engine_state == getattr(EngineState, 'ERROR', None):
                         issues.append("Arbitrage Engine: error")
-                    elif self.arbitrage_engine.state == EngineState.PAUSED:
+                    elif getattr(engine_state, 'name', '') == 'PAUSED' or engine_state == getattr(EngineState, 'PAUSED', None):
                         issues.append("Arbitrage Engine: pausado (circuit breaker)")
 
                 if issues:

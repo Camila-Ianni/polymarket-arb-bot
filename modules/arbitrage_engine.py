@@ -78,7 +78,7 @@ class ArbitrageEngine:
             dry_run=self.config.execution.dry_run
         )
 
-        self._state = EngineState.STOPPED
+        self._state = EngineState.RUNNING
         self._metrics = EngineMetrics()
 
         self._market_state: Dict[str, MarketState] = {}

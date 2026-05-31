@@ -202,7 +202,7 @@ def load_config() -> AppConfig:
     market_ids = _parse_list_env("POLYMARKET_MARKET_IDS")
     if not market_ids:
         market_ids = _parse_list_env("MARKET_IDS")
-    print(f"Cargados los siguientes Market IDs desde .env: {market_ids}")
+    logger.info(f"Cargados los siguientes Market IDs desde .env: {market_ids}")
 
     polymarket_config = PolymarketConfig(
         api_key=api_key,

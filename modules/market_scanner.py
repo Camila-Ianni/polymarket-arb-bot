@@ -61,9 +61,10 @@ def _parse_ts(ts_str: str) -> Optional[datetime]:
         return None
 
 class MarketScanner:
-    def __init__(self):
+    def __init__(self, dashboard=None):
         self.gamma_url = "https://gamma-api.polymarket.com/events?active=true&closed=false"
         self.clob_url = "https://clob.polymarket.com/markets"
+        self.dashboard = dashboard
 
     async def _fetch_gamma(self) -> Tuple[Optional[str], str]:
         try:
@@ -107,11 +108,15 @@ class MarketScanner:
 
     async def get_active_btc_5min_market(self) -> Tuple[Optional[str], str]:
         logger.info("Iniciando escaneo de mercados (Capa 1: Gamma API)...")
+        if self.dashboard:
+            self.dashboard.add_event("[SCANNER] Intentando capa 1 (Gamma API)...")
         tid, name = await self._fetch_gamma()
         if tid:
             return tid, name
             
         logger.info("Iniciando escaneo de mercados (Capa 2: CLOB API Fallback)...")
+        if self.dashboard:
+            self.dashboard.add_event("[SCANNER] Intentando capa 2 (CLOB REST)...")
         tid, name = await self._fetch_clob()
         if tid:
             return tid, name
