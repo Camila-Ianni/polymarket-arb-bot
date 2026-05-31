@@ -55,14 +55,16 @@ class BotOrchestrator:
     5. Health checking de componentes
     """
 
-    def __init__(self, config: Optional[AppConfig] = None):
+    def __init__(self, config: Optional[AppConfig] = None, order_size_usdc: float = 20.0):
         """
         Inicializa el orquestador.
 
         Args:
             config: Configuración (usa global si None)
+            order_size_usdc: Tamaño de cada orden (USDC)
         """
         self.config = config or get_config()
+        self.order_size_usdc = order_size_usdc
 
         # Componentes (se inicializan en _initialize_components)
         self.weather_feed: Optional[FastWeatherFeed] = None
@@ -120,7 +122,8 @@ class BotOrchestrator:
             # 5. Execution Engine (EIP-712 pre-signing)
             self.execution_engine = ExecutionEngine(
                 clob_client=self.arbitrage_engine.clob_client,
-                config=self.config
+                config=self.config,
+                order_size_usdc=self.order_size_usdc
             )
             
             # Conectar Feed con ExecutionEngine
@@ -437,13 +440,13 @@ class BotOrchestrator:
 # PUNTO DE ENTRADA PRINCIPAL
 # =============================================================================
 
-async def main() -> None:
+async def main(order_size_usdc: float) -> None:
     """
     Función main asíncrona.
 
     Configura logging, carga configuración, y ejecuta el orquestador.
     """
-    # Cargar configuración (ya está cargada por get_config() pero validar)
+    # Cargar configuración
     config = get_config()
 
     # Configurar logging
@@ -458,7 +461,7 @@ async def main() -> None:
     logger.info(f"Config loaded: dry_run={config.execution.dry_run}")
 
     # Crear y ejecutar orquestador
-    orchestrator = BotOrchestrator(config)
+    orchestrator = BotOrchestrator(config, order_size_usdc=order_size_usdc)
 
     try:
         await orchestrator.start()
@@ -475,11 +478,23 @@ async def main() -> None:
 def run() -> None:
     """
     Función de entrada para ejecutar desde CLI.
-
-    Usa asyncio.run() para ejecutar el event loop principal.
     """
     try:
-        asyncio.run(main())
+        # Bloqueo Pre-Inicio
+        while True:
+            try:
+                user_input = input("💰 Ingresa el tamaño de la apuesta por trade (USDC): ")
+                order_size_usdc = float(user_input)
+                if order_size_usdc <= 0:
+                    print("El tamaño de la apuesta debe ser mayor a 0.")
+                    continue
+                break
+            except ValueError:
+                print("Por favor ingresa un número válido.")
+                
+        print("\n⏳ Autenticando con Polymarket y levantando subsistemas, por favor espera...")
+        
+        asyncio.run(main(order_size_usdc))
     except KeyboardInterrupt:
         print("\nBot detenido por el usuario")
         sys.exit(0)

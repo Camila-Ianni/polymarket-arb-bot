@@ -21,7 +21,6 @@ logger = logging.getLogger("polymarket_arb.execution")
 # Ventana de ejecución y pre-firma
 PRESIGN_AT_SECONDS_REMAINING = 60   # pre-firma cuando queda 1 minuto
 FIRE_AT_SECONDS_REMAINING    = 8    # dispara cuando quedan 8 segundos
-ORDER_SIZE_USDC              = 20.0  # tamaño de orden en USDC
 SLIPPAGE_TOLERANCE           = 0.03  # 3 centavos de tolerancia
 
 @dataclass
@@ -53,9 +52,10 @@ class PreSignedBundle:
     presign_price_no: float
 
 class ExecutionEngine:
-    def __init__(self, clob_client: ClobClient, config: AppConfig):
+    def __init__(self, clob_client: ClobClient, config: AppConfig, order_size_usdc: float = 20.0):
         self.clob = clob_client
         self.config = config
+        self.order_size_usdc = order_size_usdc
         self._bundle: Optional[PreSignedBundle] = None
         self._fired = False
         self._presigned = False
@@ -79,13 +79,13 @@ class ExecutionEngine:
         order_args_yes = OrderArgs(
             token_id=ctx.token_id_yes,
             price=buy_price_yes,
-            size=ORDER_SIZE_USDC / buy_price_yes,
+            size=self.order_size_usdc / buy_price_yes,
             side=BUY,
         )
         order_args_no = OrderArgs(
             token_id=ctx.token_id_no,
             price=buy_price_no,
-            size=ORDER_SIZE_USDC / buy_price_no,
+            size=self.order_size_usdc / buy_price_no,
             side=BUY,
         )
 
