@@ -120,24 +120,7 @@ class BotOrchestrator:
             )
             logger.debug("Arbitrage Engine inicializado (Maker Mode)")
 
-            # 5. Polymarket Monitor (Orderbook WebSocket)
-            self.polymarket_monitor = PolymarketMonitor(
-                config=self.config,
-                sandbox=False,  # True para testing
-            )
-            logger.debug("Polymarket Monitor inicializado")
-
-            # =========================================================
-            # CONECTAR COMPONENTES (Callback wiring)
-            # =========================================================
-
-            # Polymarket Monitor -> Arbitrage Engine (No usa weather_feed)
-            self.polymarket_monitor.on_update(self._on_market_update)
-
-            # Arbitrage Engine -> Logging externo (opcional)
-            self.arbitrage_engine.on_signal(self._on_arbitrage_signal)
-
-            logger.info("Componentes inicializados y conectados")
+            logger.info("Componentes inicializados")
 
     async def _on_weather_observation(self, observation: WeatherObservation) -> None:
         """
@@ -211,40 +194,81 @@ class BotOrchestrator:
             except Exception as e:
                 logger.error(f"Error en health check: {e}", exc_info=True)
 
-    async def _metrics_log_loop(self) -> None:
+    async def _trading_cycle_loop(self) -> None:
         """
-        Loop de logging periódico de métricas.
-        Loguea el estado del sistema cada 10 segundos para auditoría,
-        incluyendo los datos de mercado del CLOB SDK oficial.
+        Ciclo principal de evaluación y simulación (Strict 5 minutes).
+        Extrae datos EXCLUSIVAMENTE del CLOB SDK oficial y muestra el Dashboard.
         """
+        import traceback
+        from datetime import datetime
+
+        logger.info("Iniciando ciclo de evaluación de 5 minutos sobre mercados CLOB...")
+
         while self._running:
             try:
-                await asyncio.sleep(10)  # Reducido a 10s para ver los datos más seguido
+                # Dashboard Header
+                print("\n" + "═"*90)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🔮 POLYMARKET HFT DASHBOARD (DRY_RUN={self.config.execution.dry_run})")
+                print("═"*90)
+                print(f"{'TIMESTAMP':<20} | {'MERCADO':<15} | {'MID-PRICE':<12} | {'SPREAD':<10} | {'ESTADO DE LA ORDEN':<20}")
+                print("-" * 90)
 
-                if self.arbitrage_engine:
-                    summary = self.arbitrage_engine.get_engine_summary()
-                    logger.info(f"📈 Métricas del engine: {summary}")
+                market_ids = self.config.polymarket.market_ids
+                if not market_ids or market_ids[0] == "BTC_TOKEN_ID_HERE":
+                    # Fallback a mercados default de BTC y ETH por ahora
+                    market_ids = [
+                        "21731671587841364506504284534731362243405788326901844622119970890696956799015", # BTC example
+                        "12345678901234567890123456789012345678901234567890123456789012345678901234567"  # ETH example
+                    ]
+
+                if self.arbitrage_engine and self.arbitrage_engine.clob_client:
+                    client = self.arbitrage_engine.clob_client
                     
-                    # Fetch real market data via official SDK
-                    try:
-                        market_id = self.config.polymarket.market_ids[0]
-                        ob = await self.arbitrage_engine.clob_client.get_order_book(market_id)
-                        
-                        best_bid = float(ob.bids[0].price) if ob.bids else 0.0
-                        best_ask = float(ob.asks[0].price) if ob.asks else 0.0
-                        mid_price = (best_bid + best_ask) / 2 if (best_bid and best_ask) else 0.0
-                        
-                        logger.info(
-                            f"📉 [SDK CLOB MARKET DATA] Market: {market_id[:6]}... | "
-                            f"Mid-Price: {mid_price:.4f} | Best Bid: {best_bid:.4f} | Best Ask: {best_ask:.4f}"
-                        )
-                    except Exception as e:
-                        logger.warning(f"No se pudo obtener el orderbook vía SDK: {e}")
+                    for idx, market_id in enumerate(market_ids):
+                        market_name = "BTC" if idx == 0 else "ETH"
+                        ts = datetime.now().strftime('%H:%M:%S')
+                        try:
+                            # 1. Oráculo Nativo: Order Book del CLOB
+                            ob = await client.get_order_book(market_id)
+                            
+                            best_bid = float(ob.bids[0].price) if hasattr(ob, 'bids') and ob.bids else 0.0
+                            best_ask = float(ob.asks[0].price) if hasattr(ob, 'asks') and ob.asks else 0.0
+                            
+                            if best_bid and best_ask:
+                                mid_price = (best_bid + best_ask) / 2
+                                spread = best_ask - best_bid
+                                
+                                # Simulación de orden Maker
+                                order_status = "Maker POST_ONLY Emitida" if spread > 0.01 else "Spread Insuficiente"
+                                
+                                # Simulamos la colocación si spread es bueno
+                                if spread > 0.01:
+                                    await client.place_order(market_id, "BUY", best_bid + 0.001, 5.0)
+                            else:
+                                mid_price = 0.0
+                                spread = 0.0
+                                order_status = "Sin Liquidez (Ignorado)"
+                                
+                            print(f"{ts:<20} | {market_name:<15} | {mid_price:<12.4f} | {spread:<10.4f} | {order_status:<20}")
+                            
+                        except Exception as e:
+                            # Manejo Estricto de Errores: Traceback exacto y mensaje original
+                            print(f"{ts:<20} | {market_name:<15} | {'ERROR':<12} | {'ERROR':<10} | FAILED")
+                            print("\n❌ [CRITICAL ERROR] Excepción capturada en la comunicación CLOB:")
+                            print(f"Mensaje del Servidor: {str(e)}")
+                            traceback.print_exc()
+
+                print("═"*90)
+                await asyncio.sleep(300)  # Strict 5 minutes
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error en metrics log: {e}", exc_info=True)
+                import traceback
+                print("\n❌ [SYSTEM ERROR] Fallo crítico en el loop de trading:")
+                print(f"Mensaje: {str(e)}")
+                traceback.print_exc()
+                await asyncio.sleep(30)
 
     def _setup_signal_handlers(self) -> None:
         """
@@ -289,16 +313,13 @@ class BotOrchestrator:
         # Iniciar componentes
         logger.info("Iniciando componentes...")
 
-        # 2. Iniciar Polymarket Monitor
-        await self.polymarket_monitor.start()
-
         # 3. Iniciar Arbitrage Engine
         await self.arbitrage_engine.start()
 
         # Iniciar tareas de background
         self._running = True
         self._health_check_task = asyncio.create_task(self._health_check_loop())
-        self._metrics_log_task = asyncio.create_task(self._metrics_log_loop())
+        self._metrics_log_task = asyncio.create_task(self._trading_cycle_loop())
 
         init_time = time.time() - start_time
         logger.info(f"✅ Bot iniciado en {init_time:.2f}s")
