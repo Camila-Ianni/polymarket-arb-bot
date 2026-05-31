@@ -62,4 +62,7 @@ class ChainlinkRTDSFeed:
                 direction = "UP" if variation >= 0 else "DOWN"
                 
                 if self.on_signal:
-                    self.on_signal(self.last_price, variation, direction)
+                    if asyncio.iscoroutinefunction(self.on_signal):
+                        await self.on_signal(self.last_price, variation, direction)
+                    else:
+                        self.on_signal(self.last_price, variation, direction)

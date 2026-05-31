@@ -70,6 +70,7 @@ class BotOrchestrator:
         self.risk_manager: Optional[RiskManager] = None
         self.arbitrage_engine: Optional[ArbitrageEngine] = None
         self.chainlink_feed: Optional[ChainlinkRTDSFeed] = None
+        self.execution_engine: Optional[ExecutionEngine] = None
 
         # Estado del orquestador
         self._running = False
@@ -115,6 +116,30 @@ class BotOrchestrator:
             # 4. Chainlink RTDS Feed
             self.chainlink_feed = ChainlinkRTDSFeed()
             logger.debug("Chainlink RTDS Feed inicializado")
+
+            # 5. Execution Engine (EIP-712 pre-signing)
+            self.execution_engine = ExecutionEngine(
+                clob_client=self.arbitrage_engine.clob_client,
+                config=self.config
+            )
+            
+            # Conectar Feed con ExecutionEngine
+            async def _on_price_tick(price: float, delta: float, direction: str):
+                # ChainlinkRTDSFeed llama a on_signal, lo pasamos al engine si hay contexto
+                if self.chainlink_feed and self.chainlink_feed.market_timer:
+                    # Adaptamos MarketTimer a MarketContext para simulación
+                    ctx = MarketContext(
+                        condition_id="simulated",
+                        token_id_yes="12345",
+                        token_id_no="67890",
+                        open_ts=self.chainlink_feed.market_timer.start_time,
+                        open_price=self.chainlink_feed.last_price,
+                        last_price=price,
+                    )
+                    await self.execution_engine.on_price_tick(ctx, price)
+
+            self.chainlink_feed.on_signal = _on_price_tick
+            logger.debug("Execution Engine inicializado y conectado")
 
             logger.info("Componentes inicializados")
 
