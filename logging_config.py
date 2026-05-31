@@ -29,12 +29,12 @@ from datetime import datetime
 
 # Formato detallado para logs de archivo (incluye microsegundos)
 DETAILED_FORMAT = (
-    "%(asctime)s.%(msecs)03d | %(levelname)-8s | %(name)-20s | %(message)s"
+    "[%(asctime)s.%(msecs)03d] [%(levelname)s] [%(name)s] %(message)s"
 )
 
 # Formato simplificado para consola
 CONSOLE_FORMAT = (
-    "%(asctime)s.%(msecs)03d | %(levelname)-8s | %(message)s"
+    "[%(asctime)s.%(msecs)03d] [%(levelname)s] %(message)s"
 )
 
 # Formato JSON para ingestión en sistemas de monitoreo (ELK, Datadog)

@@ -173,7 +173,7 @@ def load_config() -> AppConfig:
     # Cargar .env si existe
     env_path = Path(__file__).parent / ".env"
     if env_path.exists():
-        load_dotenv(env_path)
+        load_dotenv(env_path, override=True)
         logger.info(f"Cargando configuración desde {env_path}")
     else:
         logger.warning("No se encontró .env, usando variables de entorno del sistema")
@@ -198,11 +198,16 @@ def load_config() -> AppConfig:
     # =========================================================================
     api_key = os.getenv("POLYMARKET_API_KEY", "")
     condition_id = os.getenv("CONDITION_ID", "")
+    
+    market_ids = _parse_list_env("POLYMARKET_MARKET_IDS")
+    if not market_ids:
+        market_ids = _parse_list_env("MARKET_IDS")
+    print(f"Cargados los siguientes Market IDs desde .env: {market_ids}")
 
     polymarket_config = PolymarketConfig(
         api_key=api_key,
         condition_id=condition_id,
-        market_ids=_parse_list_env("MARKET_IDS"),
+        market_ids=market_ids,
     )
 
     # =========================================================================

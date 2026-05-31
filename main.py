@@ -189,19 +189,11 @@ class BotOrchestrator:
         while self._running:
             try:
                 # Dashboard Header
-                print("\n" + "═"*90)
+                print("\n" + "="*80)
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🔮 POLYMARKET HFT DASHBOARD (DRY_RUN={self.config.execution.dry_run})")
-                print("═"*90)
-                print(f"{'TIMESTAMP':<20} | {'MERCADO':<15} | {'MID-PRICE':<12} | {'SPREAD':<10} | {'ESTADO DE LA ORDEN':<20}")
-                print("-" * 90)
+                print("="*80)
 
                 market_ids = self.config.polymarket.market_ids
-                if not market_ids or market_ids[0] == "BTC_TOKEN_ID_HERE":
-                    # Fallback a mercados default de BTC y ETH por ahora
-                    market_ids = [
-                        "21731671587841364506504284534731362243405788326901844622119970890696956799015", # BTC example
-                        "12345678901234567890123456789012345678901234567890123456789012345678901234567"  # ETH example
-                    ]
 
                 if self.arbitrage_engine and self.arbitrage_engine.clob_client:
                     client = self.arbitrage_engine.clob_client
@@ -231,14 +223,11 @@ class BotOrchestrator:
                                 spread = 0.0
                                 order_status = "Sin Liquidez (Ignorado)"
                                 
-                            print(f"{ts:<20} | {market_name:<15} | {mid_price:<12.4f} | {spread:<10.4f} | {order_status:<20}")
+                            print(f"[{ts}] {market_name} | Mid: {mid_price:.4f} | Spread: {spread:.4f} | Status: {order_status}")
                             
                         except Exception as e:
-                            # Manejo Estricto de Errores: Traceback exacto y mensaje original
-                            print(f"{ts:<20} | {market_name:<15} | {'ERROR':<12} | {'ERROR':<10} | FAILED")
-                            print("\n❌ [CRITICAL ERROR] Excepción capturada en la comunicación CLOB:")
-                            print(f"Mensaje del Servidor: {str(e)}")
-                            traceback.print_exc()
+                            # Manejo Estricto de Errores
+                            print(f"[{ts}] {market_name} | ERROR: {str(e)}")
 
                 print("═"*90)
                 await asyncio.sleep(300)  # Strict 5 minutes
