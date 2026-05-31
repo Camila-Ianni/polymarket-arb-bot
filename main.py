@@ -33,6 +33,7 @@ from models import OrderBookSnapshot
 from modules.arbitrage_engine import ArbitrageEngine, EngineState
 from modules.risk_manager import RiskManager
 from modules.polymarket_chainlink_feed import ChainlinkRTDSFeed, MarketTimer
+from modules.execution_engine import ExecutionEngine, MarketContext
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
