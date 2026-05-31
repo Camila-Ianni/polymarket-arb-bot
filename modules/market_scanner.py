@@ -107,6 +107,9 @@ class MarketScanner:
         return None, ""
 
     async def get_active_btc_5min_market(self) -> Tuple[Optional[str], str]:
+        import time
+        from config import get_config
+        
         logger.info("Iniciando escaneo de mercados (Capa 1: Gamma API)...")
         if self.dashboard:
             self.dashboard.add_event("[SCANNER] Intentando capa 1 (Gamma API)...")
@@ -120,6 +123,20 @@ class MarketScanner:
         tid, name = await self._fetch_clob()
         if tid:
             return tid, name
+            
+        # Fallback de testing
+        config = get_config()
+        if config.execution.dry_run:
+            simulated_market = {
+                "condition_id": "0xSIMULATED_CONDITION_ID",
+                "token_id_yes": "1111111111",
+                "token_id_no": "2222222222",
+                "close_ts": time.time() + 90.0,
+                "question": "⚠️ [SIMULACIÓN] BTC cerrará por encima de X?"
+            }
+            if self.dashboard:
+                self.dashboard.add_event("[SCANNER] ⚠️ Inyectando mercado de prueba (DRY_RUN)...")
+            return simulated_market, simulated_market["question"]
             
         logger.info("No se encontró ningún mercado activo de BTC a 5 minutos.")
         return None, ""
