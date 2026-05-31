@@ -167,7 +167,7 @@ class BotOrchestrator:
 
         Reenvía los datos al ArbitrageEngine para procesamiento.
         """
-        if self.arbitrage_engine and self.arbitrage_engine.is_running:
+        if self.arbitrage_engine and getattr(self.arbitrage_engine, 'state', None) == getattr(EngineState, 'RUNNING', None):
             await self.arbitrage_engine.submit_market_data(snapshot)
 
     async def _on_arbitrage_signal(self, signal) -> None:
