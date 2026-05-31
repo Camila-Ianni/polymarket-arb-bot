@@ -15,16 +15,16 @@ from typing import Optional, Dict, Any, Callable, Awaitable
 from enum import Enum, auto
 import logging
 
-from ..config import AppConfig, get_config
-from ..logging_config import get_logger, get_latency_logger
-from ..models import (
+from config import AppConfig, get_config
+from logging_config import get_logger, get_latency_logger
+from models import (
     ArbitrageSignal,
     ArbitrageSignalType,
     OrderBookSnapshot,
     MarketSide,
 )
 from .risk_manager import RiskManager
-from .clob_api import PolymarketClobClient, Side, OrderType
+from .clob_api import PolymarketClobClient, Side
 
 logger = get_logger(__name__)
 latency_logger = get_latency_logger(__name__)
@@ -156,7 +156,6 @@ class ArbitrageEngine:
                 signal_type=ArbitrageSignalType.PRICE_MISMATCH,
                 condition_id=market_state.condition_id,
                 market_id=market_state.market_id,
-                weather_data=None, # Desactivamos weather
                 market_data=market_state.order_book,
                 expected_roi=spread - self.maker_fee,
                 estimated_gas_cost=Decimal(0), # No gas en L2 meta-tx

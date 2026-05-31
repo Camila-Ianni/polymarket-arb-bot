@@ -59,7 +59,7 @@ class PolymarketClobClient:
         """Obtiene el OrderBook directamente desde el CLOB via SDK."""
         return await self._execute_with_backoff(self.client.get_order_book, market_id)
 
-    async def place_order(self, market_id: str, side: Side, price: float, size: float, order_type: SDKOrderType = SDKOrderType.POST_ONLY) -> dict:
+    async def place_order(self, market_id: str, side: Side, price: float, size: float, order_type: SDKOrderType = SDKOrderType.GTC) -> dict:
         """Coloca una orden utilizando el SDK oficial."""
         if self.dry_run:
             logger.info(f"🔮 [DRY RUN - SDK] Orden {order_type} {side.value} | Precio: {price} | Tamaño: {size}")

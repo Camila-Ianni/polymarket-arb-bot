@@ -24,9 +24,9 @@ from typing import Optional, Dict, Any, List
 from enum import Enum, auto
 import logging
 
-from ..config import AppConfig, get_config
-from ..logging_config import get_logger
-from ..models import CircuitBreakerState, RiskMetrics, ArbitrageSignal
+from config import AppConfig, get_config
+from logging_config import get_logger
+from models import CircuitBreakerState, RiskMetrics, ArbitrageSignal
 
 logger = get_logger(__name__)
 

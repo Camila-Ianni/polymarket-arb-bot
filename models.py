@@ -189,57 +189,6 @@ class OrderBookSnapshot:
 
 
 # =============================================================================
-# MODELOS DE DATOS CLIMÁTICOS
-# =============================================================================
-
-@dataclass(frozen=True, slots=True)
-class WeatherObservation:
-    """
-    Observación climática de alta precisión.
-
-    Contiene el dato crudo más metadata para validación.
-    """
-    timestamp_ns: int           # Timestamp de la observación (nanosegundos)
-    received_at_ns: int         # Cuando recibimos el dato (para medir latencia)
-    source: str                 # Fuente del dato (ej. "Meteomatics", "NOAA")
-
-    # Valores climáticos (dependen del mercado)
-    temperature_c: Optional[float] = None
-    humidity_pct: Optional[float] = None
-    wind_speed_kmh: Optional[float] = None
-    precipitation_mm: Optional[float] = None
-    pressure_hpa: Optional[float] = None
-
-    # Metadata de calidad
-    quality_score: float = 1.0  # 0-1, donde 1 es máxima confianza
-    is_live: bool = True        # False si es dato histórico/retrasado
-
-    @property
-    def latency_ns(self) -> int:
-        """Latencia en nanosegundos desde la observación hasta recepción."""
-        return self.received_at_ns - self.timestamp_ns
-
-    @property
-    def latency_ms(self) -> float:
-        """Latencia en milisegundos."""
-        return self.latency_ns / 1_000_000
-
-    def is_fresh(self, max_age_ms: float = 500) -> bool:
-        """
-        Verifica si el dato es "fresco" (no muy antiguo).
-
-        Args:
-            max_age_ms: Edad máxima aceptable en milisegundos
-
-        Returns:
-            True si el dato es suficientemente reciente
-        """
-        current_ns = time.time_ns()
-        age_ms = (current_ns - self.received_at_ns) / 1_000_000
-        return age_ms < max_age_ms
-
-
-# =============================================================================
 # MODELOS DE SEÑALES DE ARBITRAJE
 # =============================================================================
 
@@ -257,7 +206,6 @@ class ArbitrageSignal:
     market_id: str
 
     # Datos que dispararon la señal
-    weather_data: WeatherObservation
     market_data: OrderBookSnapshot
 
     # Análisis de rentabilidad
@@ -323,7 +271,7 @@ class TransactionResult:
     error_message: Optional[str] = None
 
     # Timestamps
-    submitted_at_ns: int
+    submitted_at_ns: int = 0
     confirmed_at_ns: Optional[int] = None
 
     @property

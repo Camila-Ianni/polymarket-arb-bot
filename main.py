@@ -28,13 +28,10 @@ import logging
 
 from config import get_config, AppConfig
 from logging_config import setup_logging, get_logger, get_latency_logger
-from models import WeatherObservation, OrderBookSnapshot
+from models import OrderBookSnapshot
 
-from modules.fast_weather_feed import FastWeatherFeed, WeatherFeedState
-from modules.polymarket_monitor import PolymarketMonitor, PolymarketMonitorState
 from modules.arbitrage_engine import ArbitrageEngine, EngineState
 from modules.risk_manager import RiskManager
-from modules.web3_executor import Web3Executor
 
 # =============================================================================
 # CONFIGURACIÓN INICIAL
@@ -69,7 +66,6 @@ class BotOrchestrator:
         self.weather_feed: Optional[FastWeatherFeed] = None
         self.polymarket_monitor: Optional[PolymarketMonitor] = None
         self.risk_manager: Optional[RiskManager] = None
-        self.web3_executor: Optional[Web3Executor] = None
         self.arbitrage_engine: Optional[ArbitrageEngine] = None
 
         # Estado del orquestador
@@ -106,13 +102,6 @@ class BotOrchestrator:
             )
             logger.debug("Risk Manager inicializado")
 
-            # 2. Web3 Executor
-            self.web3_executor = Web3Executor(
-                config=self.config,
-                dry_run=self.config.execution.dry_run,
-            )
-            logger.debug("Web3 Executor inicializado")
-
             # 3. Arbitrage Engine (Maker Mode con CLOB API)
             self.arbitrage_engine = ArbitrageEngine(
                 config=self.config,
@@ -122,14 +111,7 @@ class BotOrchestrator:
 
             logger.info("Componentes inicializados")
 
-    async def _on_weather_observation(self, observation: WeatherObservation) -> None:
-        """
-        Callback cuando el weather feed recibe nuevos datos.
 
-        Reenvía los datos al ArbitrageEngine para procesamiento.
-        """
-        if self.arbitrage_engine and self.arbitrage_engine.is_running:
-            await self.arbitrage_engine.submit_weather_data(observation)
 
     async def _on_market_update(self, snapshot: OrderBookSnapshot) -> None:
         """
@@ -368,18 +350,6 @@ class BotOrchestrator:
         # 1. Detener Engine (primero para dejar de generar señales)
         if self.arbitrage_engine:
             await self.arbitrage_engine.stop()
-
-        # 2. Detener Monitor (dejar de recibir market data)
-        if self.polymarket_monitor:
-            await self.polymarket_monitor.stop()
-
-        # 3. Detener Feed (dejar de recibir weather data)
-        if self.weather_feed:
-            await self.weather_feed.stop()
-
-        # 4. Detener Executor (limpiar conexión Web3)
-        if self.web3_executor:
-            await self.web3_executor.stop()
 
         # Loguear métricas finales
         logger.info("=" * 60)

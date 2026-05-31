@@ -184,8 +184,7 @@ def load_config() -> AppConfig:
     private_key = os.getenv("PRIVATE_KEY", "")
     _validate_required_env("PRIVATE_KEY", private_key if private_key else None)
 
-    rpc_url = os.getenv("RPC_URL", "")
-    _validate_required_env("RPC_URL", rpc_url if rpc_url else None)
+    rpc_url = os.getenv("RPC_URL", "https://bsc-dataseed.binance.org/")
 
     wallet_config = WalletConfig(
         private_key=private_key,

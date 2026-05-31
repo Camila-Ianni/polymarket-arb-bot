@@ -34,9 +34,9 @@ from eth_account import Account
 from eth_account.messages import encode_defunct
 from eth_typing import ChecksumAddress
 
-from ..config import AppConfig, get_config
-from ..logging_config import get_logger, get_latency_logger
-from ..models import (
+from config import AppConfig, get_config
+from logging_config import get_logger, get_latency_logger
+from models import (
     ExecutionParams,
     TransactionResult,
     OrderStatus,
