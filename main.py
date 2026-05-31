@@ -345,19 +345,26 @@ class BotOrchestrator:
             await self.arbitrage_engine.stop()
 
         # Loguear métricas finales
-        logger.info("=" * 60)
-        logger.info("📊 MÉTRICAS FINALES:")
+        print("\n" + "=" * 60)
+        print("📊 MÉTRICAS FINALES:")
 
         if self.arbitrage_engine:
             summary = self.arbitrage_engine.get_engine_summary()
-            logger.info(f"Engine: {summary}")
+            print("  [ENGINE]")
+            for k, v in summary.items():
+                if isinstance(v, dict): continue
+                print(f"    {k.replace('_', ' ').title():<25}: {v}")
 
         if self.risk_manager:
             risk_summary = self.risk_manager.get_risk_summary()
-            logger.info(f"Risk: {risk_summary}")
+            print("  [RISK]")
+            for k, v in risk_summary.items():
+                if isinstance(v, dict): continue
+                print(f"    {k.replace('_', ' ').title():<25}: {v}")
 
-        logger.info("=" * 60)
-        logger.info("✅ Bot detenido correctamente")
+        print("=" * 60)
+        print("✅ Apagado del sistema completado.")
+        logger.info("Bot detenido correctamente")
 
 
 # =============================================================================
