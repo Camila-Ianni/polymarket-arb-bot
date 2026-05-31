@@ -96,6 +96,10 @@ class ArbitrageEngine:
         # Maker fee en Polymarket es generalmente 0% o negativa, pero agregamos costo de slippage/cancelaciones
         self.maker_fee = Decimal("0.005")  # 0.5% margen de seguridad por fee
 
+    @property
+    def state(self) -> EngineState:
+        return self._state
+
     async def submit_market_data(self, snapshot: OrderBookSnapshot) -> None:
         try:
             self._market_queue.put_nowait(snapshot)

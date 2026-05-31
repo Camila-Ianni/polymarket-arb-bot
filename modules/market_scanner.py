@@ -12,12 +12,18 @@ def get_current_5m_market() -> Tuple[Optional[str], str]:
     Si no encuentra ninguno, devuelve (None, "").
     """
     url = "https://gamma-api.polymarket.com/events?active=true&closed=false"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         data = response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error de red accediendo a Gamma API: {e}")
+        return None, ""
     except Exception as e:
-        logger.error(f"Error accediendo a Gamma API: {e}")
+        logger.error(f"Error inesperado accediendo a Gamma API: {e}")
         return None, ""
 
     for event in data:
