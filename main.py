@@ -125,9 +125,7 @@ class BotOrchestrator:
             
             # Conectar Feed con ExecutionEngine
             async def _on_price_tick(price: float, delta: float, direction: str):
-                # ChainlinkRTDSFeed llama a on_signal, lo pasamos al engine si hay contexto
                 if self.chainlink_feed and self.chainlink_feed.market_timer:
-                    # Adaptamos MarketTimer a MarketContext para simulación
                     ctx = MarketContext(
                         condition_id="simulated",
                         token_id_yes="12345",
@@ -137,10 +135,19 @@ class BotOrchestrator:
                         last_price=price,
                     )
                     await self.execution_engine.on_price_tick(ctx, price)
+                    
+                    if hasattr(self, 'dashboard'):
+                        sign = "+" if delta >= 0 else ""
+                        self.dashboard.add_event(f"⚡ [SIGNAL] BTC: ${price:,.2f} | Δ: {sign}{delta:.2f}% → {direction}")
 
             self.chainlink_feed.on_signal = _on_price_tick
             logger.debug("Execution Engine inicializado y conectado")
 
+            # 6. Dashboard Renderer
+            from modules.dashboard import DashboardRenderer
+            self.dashboard = DashboardRenderer(self)
+            self.execution_engine.dashboard = self.dashboard
+            
             logger.info("Componentes inicializados")
 
 
@@ -220,11 +227,6 @@ class BotOrchestrator:
 
         while self._running:
             try:
-                # Dashboard Header
-                print("\n" + "="*80)
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🔮 POLYMARKET HFT DASHBOARD (DRY_RUN={self.config.execution.dry_run})")
-                print("="*80)
-
                 if self.arbitrage_engine and self.arbitrage_engine.clob_client:
                     client = self.arbitrage_engine.clob_client
                     
@@ -233,10 +235,13 @@ class BotOrchestrator:
                     ts = datetime.now().strftime('%H:%M:%S')
                     
                     if not token_id:
-                        print(f"[{ts}] Esperando al próximo mercado de 5 min...")
+                        if hasattr(self, 'dashboard'):
+                            self.dashboard.add_event(f"[{ts}] Esperando próximo mercado 5m...")
                     else:
                         if self.chainlink_feed and not self.chainlink_feed.market_timer:
                             self.chainlink_feed.set_market_timer(MarketTimer(start_time=time.time()))
+                            if hasattr(self, 'dashboard'):
+                                self.dashboard.add_event(f"[{ts}] Nuevo mercado 5m detectado. Timer iniciado.")
                             
                         try:
                             # 1. Oráculo Nativo: Order Book del CLOB
@@ -261,23 +266,21 @@ class BotOrchestrator:
                                 order_status = "Sin Liquidez (Ignorado)"
                                 
                             short_name = "BTC 5m"
-                            print(f"[{ts}] {short_name} | Mid: {mid_price:.4f} | Spread: {spread:.4f} | Status: {order_status}")
+                            if hasattr(self, 'dashboard'):
+                                self.dashboard.add_event(f"[{ts}] {short_name} | Mid: {mid_price:.4f} | Status: {order_status}")
                             
                         except Exception as e:
                             # Manejo Estricto de Errores
-                            short_name = "BTC 5m"
-                            print(f"[{ts}] {short_name} | ERROR: {str(e)}")
+                            logger.error(f"Error en CLOB eval: {e}", exc_info=True)
+                            if hasattr(self, 'dashboard'):
+                                self.dashboard.add_event(f"[{ts}] Error evaluando CLOB: {str(e)[:40]}")
 
-                print("═"*90)
                 await asyncio.sleep(300)  # Strict 5 minutes
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                import traceback
-                print("\n❌ [SYSTEM ERROR] Fallo crítico en el loop de trading:")
-                print(f"Mensaje: {str(e)}")
-                traceback.print_exc()
+                logger.error(f"[SYSTEM ERROR] Fallo crítico en el loop de trading: {e}", exc_info=True)
                 await asyncio.sleep(30)
 
     def _setup_signal_handlers(self) -> None:
@@ -328,6 +331,9 @@ class BotOrchestrator:
 
         # 4. Iniciar Chainlink Feed
         await self.chainlink_feed.start()
+        
+        if hasattr(self, 'dashboard'):
+            await self.dashboard.start()
 
         # Iniciar tareas de background
         self._running = True
@@ -365,6 +371,9 @@ class BotOrchestrator:
         logger.info("=" * 60)
 
         self._running = False
+
+        if hasattr(self, 'dashboard'):
+            await self.dashboard.stop()
 
         # Detener tareas de background
         for task in [self._health_check_task, self._metrics_log_task]:

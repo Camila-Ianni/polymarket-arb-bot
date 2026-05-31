@@ -202,12 +202,10 @@ def setup_logging(
     root_logger.handlers.clear()
 
     # =========================================================================
-    # CONSOLE HANDLER (siempre presente)
+    # CONSOLE HANDLER - SILENCIADO (Módulo de Dashboard controla la UI visual)
     # =========================================================================
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(getattr(logging, log_level.upper()))
-    console_handler.setFormatter(MicrosecondFormatter(CONSOLE_FORMAT))
-    root_logger.addHandler(console_handler)
+    # Se elimina el StreamHandler hacia sys.stdout para evitar scrolls infinitos.
+    # Toda la salida de consola será gestionada por el render loop.
 
     # =========================================================================
     # FILE HANDLER (opcional, para producción)

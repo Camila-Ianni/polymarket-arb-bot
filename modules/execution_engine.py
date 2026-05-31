@@ -95,8 +95,8 @@ class ExecutionEngine:
         elapsed_ms = (time.perf_counter() - t0) * 1000
         logger.info(f"[PRESIGN] Pre-firma completada en {elapsed_ms:.2f}ms")
 
-        # Visual HUD
-        print("║ 🔒 [PRESIGN] T-60s | Órdenes EIP-712 pre-firmadas en memoria.    ║")
+        if hasattr(self, 'dashboard'):
+            self.dashboard.add_event("🔒 [PRESIGN] T-60s | Órdenes EIP-712 pre-firmadas en memoria.")
 
         return PreSignedBundle(
             signed_yes=signed_yes,
@@ -116,12 +116,14 @@ class ExecutionEngine:
 
         # Visual HUD for FIRE
         if self.config.execution.dry_run:
-            hud_msg = f"║ 🚀 [FIRE] T-{int(remaining)}s | SIMULACIÓN: Ejecutando {outcome} @ ${ctx.last_price:,.2f}"
-            print(hud_msg.ljust(59) + "║")
+            hud_msg = f"🚀 [FIRE] T-{int(remaining)}s | SIMULACIÓN: Ejecutando {outcome} @ ${ctx.last_price:,.2f}"
+            if hasattr(self, 'dashboard'):
+                self.dashboard.add_event(hud_msg)
             logger.info(f"[FIRE SIMULATION] Disparando {outcome} @ last_price={ctx.last_price:.2f}")
         else:
-            hud_msg = f"║ 🚀 [FIRE] T-{int(remaining)}s | LIVE: Ejecutando {outcome} @ ${ctx.last_price:,.2f}"
-            print(hud_msg.ljust(59) + "║")
+            hud_msg = f"🚀 [FIRE] T-{int(remaining)}s | LIVE: Ejecutando {outcome} @ ${ctx.last_price:,.2f}"
+            if hasattr(self, 'dashboard'):
+                self.dashboard.add_event(hud_msg)
             logger.info(f"[FIRE LIVE] Disparando {outcome} @ last_price={ctx.last_price:.2f}")
 
         t0 = time.perf_counter()
