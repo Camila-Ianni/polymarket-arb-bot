@@ -19,6 +19,8 @@ El bot está estructurado en módulos atómicos que interactúan mediante colas 
 - **`RiskManager` (`modules/risk_manager.py`)**: La barrera de defensa. Monitorea PnL, Win Rates y latencia de feeds. Si detecta pérdidas consecutivas o picos de latencia, activa *Circuit Breakers* que pausan temporalmente las operaciones.
 - **`MarketScanner` (`modules/market_scanner.py`)**: Sistema de auto-descubrimiento. Consulta dinámicamente la Gamma API para extraer el Token ID de los mercados flash de 5 minutos activos. Cuenta con un mecanismo de fallback robusto hacia el CLOB endpoint (`https://clob.polymarket.com/markets`) que protege la ejecución contra caídas de DNS o bloqueos por Cloudflare.
 
+- **`ExecutionEngine` (`modules/execution_engine.py`)**: El motor de ejecución de sub-milisegundo. Abstrae el *hot path* implementando pre-firmas criptográficas asíncronas (`EIP-712`), conexiones `Keep-Alive` HTTP y salvaguardas estrictas de simulación (`DRY_RUN`).
+
 ---
 
 ## 🔮 El Oráculo y Estrategia de Front-Running
@@ -31,9 +33,12 @@ Acceder a Chainlink Data Streams normalmente requiere credenciales B2B de pago, 
 1. **Conexión RTDS**: Nos acoplamos directamente al WebSocket público de Polymarket (`wss://ws-live-data.polymarket.com`).
 2. **Suscripción de Tópico**: Nos suscribimos exclusivamente al canal `crypto_prices_chainlink` para capturar el *mismo feed en crudo* (1 tick/segundo) que usa Polymarket para la resolución.
 3. **La Ventana Crítica**: A través del `MarketTimer`, el bot sella el precio de apertura del BTC al segundo exacto de la creación del mercado. A medida que avanza el reloj, evalúa matemáticamente el spread y la desviación (Δ%).
-4. **Ejecución Asimétrica**: En los últimos 10 segundos del ciclo, si la variación `Δ%` supera nuestra tolerancia predefinida y asegura una dirección (UP/DOWN), el bot lanza sus órdenes de liquidez antes del cierre y del volcado en cadena.
 
----
+### Pre-Firma EIP-712 y Optimización de Latencia
+El *overhead* criptográfico y la latencia de red son los peores enemigos del spread. El bot mitiga esto dividiendo la ejecución asimétrica en fases:
+1. **Fase 1 (Pre-Firma en T-60s)**: Durante la ventana inactiva, el bot empaqueta y firma (`EIP-712`) en memoria dos órdenes independientes (`YES` y `NO`). Esto delega el cálculo síncrono intensivo a un `ThreadPoolExecutor` para no bloquear el WebSocket de precios.
+2. **Fase 2 (Re-firma dinámica)**: Si el precio sufre una deriva alta antes del disparo, las órdenes se regeneran automáticamente para garantizar un *fill* exitoso dentro del *slippage* tolerado.
+3. **Fase 3 (Disparo en T-8s - Hot Path)**: En los últimos segundos, si se asegura una dirección algorítmica, el bot lanza la orden pre-construida usando una sesión `aiohttp` pre-establecida. Esto suprime el *TCP Handshake* logrando disparos sub-milisegundos a nivel local.
 
 ## 🖥 Interfaz HUD y Graceful Shutdown
 
