@@ -248,6 +248,27 @@ class BotOrchestrator:
                     token_id, market_name = await self.scanner.get_active_btc_5min_market()
                     
                     if token_id:
+                        if isinstance(token_id, dict) and token_id.get("condition_id") == "0xSIMULATED_CONDITION_ID":
+                            if hasattr(self, 'dashboard'):
+                                self.dashboard.add_event(f"[{ts}] [SIMULADOR] Reloj interno corriendo (90s)...")
+                            
+                            # Set open_ts to time.time() - 210 so close_ts (open_ts + 300) is in 90 seconds
+                            ctx = MarketContext(
+                                condition_id=token_id["condition_id"],
+                                token_id_yes=token_id["token_id_yes"],
+                                token_id_no=token_id["token_id_no"],
+                                open_ts=time.time() - 210.0,
+                                open_price=67000.0,
+                                last_price=67000.0
+                            )
+                            
+                            while time.time() < ctx.close_ts:
+                                if self.execution_engine:
+                                    await self.execution_engine.on_price_tick(ctx, 67000.0)
+                                await asyncio.sleep(1)
+                                
+                            continue
+
                         if hasattr(self, 'dashboard'):
                             self.dashboard.add_event(f"[{ts}] Mercado enganchado: {market_name[:30]}...")
                             
