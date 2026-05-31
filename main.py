@@ -147,7 +147,10 @@ class BotOrchestrator:
             from modules.dashboard import DashboardRenderer
             self.dashboard = DashboardRenderer(self)
             self.execution_engine.dashboard = self.dashboard
-            
+            # 7. Market Scanner
+            from modules.market_scanner import MarketScanner
+            self.scanner = MarketScanner()
+
             logger.info("Componentes inicializados")
 
 
@@ -230,18 +233,19 @@ class BotOrchestrator:
                 if self.arbitrage_engine and self.arbitrage_engine.clob_client:
                     client = self.arbitrage_engine.clob_client
                     
-                    from modules.market_scanner import get_current_5m_market
-                    token_id, market_name = get_current_5m_market()
                     ts = datetime.now().strftime('%H:%M:%S')
                     
-                    if not token_id:
+                    if hasattr(self, 'dashboard'):
+                        self.dashboard.add_event(f"[{ts}] Esperando próximo mercado 5m...")
+                        
+                    token_id, market_name = await self.scanner.get_active_btc_5min_market()
+                    
+                    if token_id:
                         if hasattr(self, 'dashboard'):
-                            self.dashboard.add_event(f"[{ts}] Esperando próximo mercado 5m...")
-                    else:
+                            self.dashboard.add_event(f"[{ts}] Mercado enganchado: {market_name[:30]}...")
+                            
                         if self.chainlink_feed and not self.chainlink_feed.market_timer:
                             self.chainlink_feed.set_market_timer(MarketTimer(start_time=time.time()))
-                            if hasattr(self, 'dashboard'):
-                                self.dashboard.add_event(f"[{ts}] Nuevo mercado 5m detectado. Timer iniciado.")
                             
                         try:
                             # 1. Oráculo Nativo: Order Book del CLOB
