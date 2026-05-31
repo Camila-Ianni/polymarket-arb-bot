@@ -193,17 +193,19 @@ class BotOrchestrator:
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🔮 POLYMARKET HFT DASHBOARD (DRY_RUN={self.config.execution.dry_run})")
                 print("="*80)
 
-                market_ids = self.config.polymarket.market_ids
-
                 if self.arbitrage_engine and self.arbitrage_engine.clob_client:
                     client = self.arbitrage_engine.clob_client
                     
-                    for idx, market_id in enumerate(market_ids):
-                        market_name = "BTC" if idx == 0 else "ETH"
-                        ts = datetime.now().strftime('%H:%M:%S')
+                    from modules.market_scanner import get_current_5m_market
+                    token_id, market_name = get_current_5m_market()
+                    ts = datetime.now().strftime('%H:%M:%S')
+                    
+                    if not token_id:
+                        print(f"[{ts}] Esperando al próximo mercado de 5 min...")
+                    else:
                         try:
                             # 1. Oráculo Nativo: Order Book del CLOB
-                            ob = await client.get_order_book(market_id)
+                            ob = await client.get_order_book(token_id)
                             
                             best_bid = float(ob.bids[0].price) if hasattr(ob, 'bids') and ob.bids else 0.0
                             best_ask = float(ob.asks[0].price) if hasattr(ob, 'asks') and ob.asks else 0.0
@@ -217,17 +219,19 @@ class BotOrchestrator:
                                 
                                 # Simulamos la colocación si spread es bueno
                                 if spread > 0.01:
-                                    await client.place_order(market_id, "BUY", best_bid + 0.001, 5.0)
+                                    await client.place_order(token_id, "BUY", best_bid + 0.001, 5.0)
                             else:
                                 mid_price = 0.0
                                 spread = 0.0
                                 order_status = "Sin Liquidez (Ignorado)"
                                 
-                            print(f"[{ts}] {market_name} | Mid: {mid_price:.4f} | Spread: {spread:.4f} | Status: {order_status}")
+                            short_name = "BTC 5m"
+                            print(f"[{ts}] {short_name} | Mid: {mid_price:.4f} | Spread: {spread:.4f} | Status: {order_status}")
                             
                         except Exception as e:
                             # Manejo Estricto de Errores
-                            print(f"[{ts}] {market_name} | ERROR: {str(e)}")
+                            short_name = "BTC 5m"
+                            print(f"[{ts}] {short_name} | ERROR: {str(e)}")
 
                 print("═"*90)
                 await asyncio.sleep(300)  # Strict 5 minutes
