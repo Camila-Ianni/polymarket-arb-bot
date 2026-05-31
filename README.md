@@ -1,207 +1,99 @@
-# Polymarket Latency Arbitrage Bot
+# Polymarket HFT Arbitrage Bot ⚡
 
-Bot de arbitraje de latencia para mercados de predicción climáticos en Polymarket.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Architecture](https://img.shields.io/badge/architecture-Asynchronous-green.svg)]()
+[![Status](https://img.shields.io/badge/status-Production--Ready-success.svg)]()
 
-## ⚠️ ADVERTENCIAS IMPORTANTES
+Motor de arbitraje automatizado de Alta Frecuencia (HFT) diseñado específicamente para los mercados relámpago (*flash markets*) de 5 minutos en Polymarket (ej. "BTC price up or down in 5m"). 
 
-Este bot está diseñado para **trading de alta frecuencia (HFT)** y conlleva riesgos significativos:
+Construido en Python 3.11 bajo una arquitectura 100% asíncrona, este sistema destaca por su tolerancia a fallos, escaneo dinámico y una interfaz de consola (HUD) estilo *Cyber-Industrial* que prioriza la claridad sin sacrificar la profundidad técnica en sus logs.
 
-1. **Riesgo de capital**: Puedes perder dinero real si se ejecuta en modo LIVE
-2. **Riesgo técnico**: Latencia de red, bugs de software, o fallos de API pueden causar pérdidas
-3. **Riesgo de mercado**: Los mercados pueden comportarse de forma no modelada
+---
 
-**NUNCA ejecutes este bot en modo LIVE sin:**
-- Testing extensivo en modo DRY_RUN
-- Testing con capital mínimo en sandbox
-- Monitoreo constante durante las primeras horas
+## 🏗 Arquitectura y Módulos Principales
 
-## 🏗️ Arquitectura del Sistema
+El bot está estructurado en módulos atómicos que interactúan mediante colas asíncronas (`asyncio.Queue`) y despachadores de eventos, asegurando que ninguna operación de I/O bloquee el ciclo de evaluación principal.
 
-```
-┌─────────────────────┐     ┌─────────────────────────────────────┐
-│  FastWeatherFeed    │────▶│                                     │
-│  (Meteomatics API)  │     │                                     │
-└─────────────────────┘     │         ArbitrageEngine             │
-                            │         (El Cerebro)                │
-┌─────────────────────┐     │                                     │
-│  PolymarketMonitor  │────▶│  ┌─────────────┐  ┌──────────────┐  │
-│  (Gamma API WS)     │     │  │ RiskManager │  │ Web3Executor │  │
-└─────────────────────┘     │  │ (Circuit    │  │ (Firma +     │  │
-                            │  │  Breaker)   │  │  Envío TX)   │  │
-                            │  └─────────────┘  └──────────────┘  │
-                            └─────────────────────────────────────┘
-```
+- **`BotOrchestrator` (`main.py`)**: El hilo conductor del sistema. Controla el ciclo de vida (start/stop), maneja señales del SO (`SIGINT`/`SIGTERM`) y coordina las dependencias de los demás módulos.
+- **`ArbitrageEngine` (`modules/arbitrage_engine.py`)**: El cerebro de trading. Opera exclusivamente utilizando el SDK oficial de Polymarket (`py-clob-client`) para emitir órdenes en modo *Maker* limitando el spread y capturando liquidez con precisión sub-segundo.
+- **`RiskManager` (`modules/risk_manager.py`)**: La barrera de defensa. Monitorea PnL, Win Rates y latencia de feeds. Si detecta pérdidas consecutivas o picos de latencia, activa *Circuit Breakers* que pausan temporalmente las operaciones.
+- **`MarketScanner` (`modules/market_scanner.py`)**: Sistema de auto-descubrimiento. Consulta dinámicamente la Gamma API para extraer el Token ID de los mercados flash de 5 minutos activos. Cuenta con un mecanismo de fallback robusto hacia el CLOB endpoint (`https://clob.polymarket.com/markets`) que protege la ejecución contra caídas de DNS o bloqueos por Cloudflare.
 
-### Flujo de Decisión
+---
 
-1. **FastWeatherFeed** recibe dato climático (ej. "25°C en NYC")
-2. **PolymarketMonitor** mantiene order book local en tiempo real
-3. **ArbitrageEngine** compara: ¿El precio del mercado refleja el dato nuevo?
-4. **RiskManager** valida: ¿ROI > gas + slippage? ¿Circuit breaker cerrado?
-5. **Web3Executor** firma y envía transacción a Polymarket (CTF Exchange)
+## 🔮 El Oráculo y Estrategia de Front-Running
 
-## 📁 Estructura del Proyecto
+El verdadero valor de este bot reside en la predicción algorítmica previa al cierre del contrato. Los mercados de 5 minutos en Polymarket se resuelven mediante el oráculo matemático de **Chainlink Data Streams**, evaluando si el precio final (T=300s) es superior al precio de apertura (T=0). 
 
-```
-polymarket-arb-bot/
-├── main.py                 # Orquestador principal
-├── config.py               # Configuración y validación
-├── logging_config.py       # Logging profesional con métricas de latencia
-├── models.py               # Modelos de datos inmutables
-├── requirements.txt        # Dependencias de Python
-├── .env.example            # Plantilla de configuración
-│
-└── modules/
-    ├── __init__.py
-    ├── fast_weather_feed.py   # Feed climático de baja latencia
-    ├── polymarket_monitor.py  # Monitor de mercado (Gamma WS)
-    ├── arbitrage_engine.py    # Motor de decisión
-    ├── risk_manager.py        # Circuit breaker y gestión de riesgo
-    └── web3_executor.py       # Ejecución de transacciones on-chain
+Acceder a Chainlink Data Streams normalmente requiere credenciales B2B de pago, pero este sistema sortea dicha restricción a través de nuestro módulo `polymarket_chainlink_feed.py`.
+
+### Mecanismo de Intercepción (Piggybacking)
+1. **Conexión RTDS**: Nos acoplamos directamente al WebSocket público de Polymarket (`wss://ws-live-data.polymarket.com`).
+2. **Suscripción de Tópico**: Nos suscribimos exclusivamente al canal `crypto_prices_chainlink` para capturar el *mismo feed en crudo* (1 tick/segundo) que usa Polymarket para la resolución.
+3. **La Ventana Crítica**: A través del `MarketTimer`, el bot sella el precio de apertura del BTC al segundo exacto de la creación del mercado. A medida que avanza el reloj, evalúa matemáticamente el spread y la desviación (Δ%).
+4. **Ejecución Asimétrica**: En los últimos 10 segundos del ciclo, si la variación `Δ%` supera nuestra tolerancia predefinida y asegura una dirección (UP/DOWN), el bot lanza sus órdenes de liquidez antes del cierre y del volcado en cadena.
+
+---
+
+## 🖥 Interfaz HUD y Graceful Shutdown
+
+Hemos desarrollado un entorno de consola pensado para operadores institucionales, separando radicalmente el ruido técnico de la interfaz de usuario.
+
+- **Segregación de Logs**: Cualquier excepción técnica, fallo de red, traceback crudo, o diccionario anidado es capturado silenciosamente y almacenado en el archivo permanente `polymarket_bot.log`. 
+- **Consola Clean**: La terminal principal (STDOUT) no sufre engrillados forzados ni prints sucios. En caso de pérdida de red, solo reportará un alerta discreto: `[!] Enlace con Gamma API interrumpido. Reintentando...`
+- **Graceful Shutdown**: Al interrumpir el proceso (`Ctrl+C`), el bot suspende sus tareas asíncronas para evitar procesos zombis, y despliega un reporte tabular ASCII de doble línea con las métricas finales limpias (sin inyectar diccionarios ni timestamps en la interfaz visual).
+
+```text
+╔══════════════════════════════════════════════════════════╗
+║                    📊 MÉTRICAS FINALES                    ║
+╠══════════════════════════════════════════════════════════╣
+║  [ENGINE]                                                ║
+║    State                    : SHUTDOWN                   ║
+║    Opportunities Executed   : 4                          ║
+║                                                          ║
+║  [RISK]                                                  ║
+║    Circuit Breaker State    : CLOSED                     ║
+║    Win Rate                 : 0.95                       ║
+╚══════════════════════════════════════════════════════════╝
+✅ Apagado del sistema completado.
 ```
 
-## 🚀 Instalación
+---
 
-### 1. Clonar y configurar entorno
+## ⚙️ Instalación y Uso
 
+### 1. Requisitos Previos
+*   Python >= 3.9 (Recomendado 3.11 para asincronismo nativo avanzado).
+*   Cuenta de Polymarket (Address fondeada).
+
+### 2. Configuración del Entorno
+Clona el repositorio e inicializa el entorno virtual sin pisar configuraciones nativas del OS:
 ```bash
-cd polymarket-arb-bot
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# o: venv\Scripts\activate  # Windows
+python3.11 -m venv venv --without-pip
+source venv/bin/activate
+curl -sS https://bootstrap.pypa.io/get-pip.py | python
+```
 
+### 3. Instalar Dependencias
+Instala los paquetes mandatorios (el SDK oficial y la librería para el RTDS websocket):
+```bash
 pip install -r requirements.txt
+pip install py_clob_client websockets
 ```
 
-### 2. Configurar variables de entorno
-
-```bash
-cp .env.example .env
-# Editar .env con tus credenciales reales
-```
-
-### Variables requeridas (mínimo):
-
+### 4. Configurar Variables de Entorno (`.env`)
+No modifiques el código base. Duplica `.env-examp` como `.env` e inserta tus claves.
+No requieres credenciales de Chainlink, solo de Polymarket:
 ```env
-PRIVATE_KEY=0x...
-RPC_URL=https://polygon-mainnet.g.alchemy.com/v2/YOUR_KEY
-POLYMARKET_API_KEY=your_api_key
-CONDITION_ID=market_condition_id
-MARKET_IDS=market_id_1,market_id_2
-DRY_RUN=true  # ¡IMPORTANTE! True para testing
+PRIVATE_KEY="tu_private_key_derivada_de_polymarket"
+DRY_RUN=True  # Ponlo en False para pasar a producción
+POLYMARKET_CHAIN_ID=137
 ```
+*(Nota: Si usas Trust Wallet o cuentas Smart, usa nuestro script `derive_key.py` para obtener la clave hexadecimal real).*
 
-## 🏃 Ejecución
-
-### Modo Simulación (Recomendado inicialmente)
-
+### 5. Ejecución en Producción
+Dispara el orquestador principal:
 ```bash
-# Asegurar DRY_RUN=true en .env
 python main.py
 ```
-
-El bot logueará qué operaciones **habría** ejecutado y con qué latencia, sin usar capital real.
-
-### Modo Live (⚠️ Solo después de testing extensivo)
-
-```bash
-# Cambiar DRY_RUN=false en .env
-python main.py
-```
-
-## 📊 Monitoreo
-
-### Logs en tiempo real
-
-```bash
-tail -f /var/log/polymarket-arb/bot.log
-```
-
-### Métricas clave a monitorear
-
-- `opportunities_detected`: Oportunidades detectadas
-- `opportunities_executed`: Operaciones ejecutadas
-- `avg_decision_time_ms`: Tiempo promedio de decisión (debe ser < 100ms)
-- `circuit_breaker_state`: Estado del circuit breaker
-- `feed_latency_ms`: Latencia del feed climático (debe ser < 500ms)
-
-## 🧪 Testing
-
-```bash
-# Tests unitarios
-pytest tests/ -v
-
-# Tests con coverage
-pytest tests/ --cov=. --cov-report=html
-
-# Type checking
-mypy .
-```
-
-## 🔧 Configuración Avanzada
-
-### Ajustar sensibilidad del circuit breaker
-
-```env
-MAX_CONSECUTIVE_LOSSES=3      # Pérdidas antes de parar
-MAX_FEED_LATENCY_MS=500       # Latencia máxima del feed
-MAX_FAILED_TRANSACTIONS=5     # TXs fallidas antes de parar
-CIRCUIT_BREAKER_COOLDOWN_SEC=300  # Pausa después de activar
-```
-
-### Optimizar para menor latencia
-
-```env
-# Polling más frecuente (más CPU, más latencia)
-# Modificar en FastWeatherFeed: DEFAULT_POLL_INTERVAL = 0.05  # 50ms
-
-# Usar RPC privado de baja latencia
-RPC_URL=https://polygon-mainnet.g.alchemy.com/v2/YOUR_KEY
-
-# Aumentar priority fee para TXs más rápidas
-PRIORITY_FEE_GWEI=5
-```
-
-## 📝 Estrategia de Arbitraje
-
-### La Ventana de Oportunidad
-
-El arbitraje explota el tiempo entre:
-1. **Evento físico ocurre** (ej. temperatura cambia)
-2. **Feed rápido lo detecta** (Meteomatics, ~segundos)
-3. **Oráculo de Polymarket se actualiza** (puede tomar minutos)
-
-Durante esa ventana, el precio del mercado no refleja la realidad → oportunidad de arbitraje.
-
-### Ejemplo Concreto
-
-```
-Mercado: "¿Temp en NYC > 20°C el Jan 15?"
-- Outcome YES cotiza a 45¢ (45% probabilidad implícita)
-
-14:00:00 - Feed rápido detecta: 25°C (confirmado)
-14:00:01 - Bot calcula: fair price debería ser ~100¢
-14:00:01 - Bot compra YES a 45¢
-14:02:00 - Oráculo Polymarket se actualiza a 25°C
-14:02:01 - Outcome YES sube a 95¢
-14:02:02 - Bot vende YES a 95¢
-Profit: 50¢ por share - gas - slippage
-```
-
-## ⚖️ Consideraciones Legales
-
-- Verifica que el arbitraje esté permitido en tu jurisdicción
-- Polymarket puede tener restricciones geográficas
-- Las ganancias pueden estar sujetas a impuestos
-
-## 🤝 Contribuciones
-
-Este es un esqueleto base. Mejoras bienvenidas:
-- Implementación real de APIs de weather (Meteomatics, etc.)
-- Integración con el ABI real del contrato CTF de Polymarket
-- Backtesting framework
-- Live monitoring dashboard
-
-## 📄 Licencia
-
-MIT License - Ver LICENSE para detalles.
+*(Para detenerlo de forma segura y evaluar métricas en el panel HUD, utiliza simplemente `Ctrl+C`).*
