@@ -3,6 +3,7 @@ import asyncio
 import logging
 import json
 import re
+import time
 from typing import Optional, Tuple, Dict, Any
 from datetime import datetime
 
@@ -53,13 +54,6 @@ def _extract_clob_market(market: Dict[str, Any]) -> Tuple[Optional[str], str]:
                 return tid, question
     return None, ""
 
-def _parse_ts(ts_str: str) -> Optional[datetime]:
-    try:
-        # Polymarket suele devolver ISO format
-        return datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-    except Exception:
-        return None
-
 class MarketScanner:
     def __init__(self, dashboard=None):
         self.gamma_url = "https://gamma-api.polymarket.com/events?active=true&closed=false"
@@ -106,8 +100,7 @@ class MarketScanner:
             logger.warning(f"Error en _fetch_clob: {e}")
         return None, ""
 
-    async def get_active_btc_5min_market(self) -> Tuple[Optional[str], str]:
-        import time
+    async def get_active_btc_5min_market(self) -> Tuple[Optional[Any], str]:
         from config import get_config
         
         logger.info("Iniciando escaneo de mercados (Capa 1: Gamma API)...")

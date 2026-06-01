@@ -70,32 +70,35 @@ class ExecutionEngine:
     def _presign_orders(self, ctx: MarketContext) -> PreSignedBundle:
         t0 = time.perf_counter()
 
-        current_price_yes = ctx.last_price / 100.0 if ctx.last_price > 1.0 else ctx.last_price
+        # En Polymarket CLOB, los precios ya vienen como decimales (0-1)
+        current_price_yes = ctx.last_price
         current_price_no  = 1.0 - current_price_yes
 
-        buy_price_yes = max(min(current_price_yes + SLIPPAGE_TOLERANCE, 0.99), 0.01)
-        buy_price_no  = max(min(current_price_no  + SLIPPAGE_TOLERANCE, 0.99), 0.01)
+        buy_price_yes = round(max(min(current_price_yes + SLIPPAGE_TOLERANCE, 0.99), 0.01), 2)
+        buy_price_no  = round(max(min(current_price_no  + SLIPPAGE_TOLERANCE, 0.99), 0.01), 2)
 
         order_args_yes = OrderArgs(
-            token_id=ctx.token_id_yes,
             price=buy_price_yes,
-            size=self.order_size_usdc / buy_price_yes,
+            size=round(self.order_size_usdc / buy_price_yes, 2),
             side=BUY,
+            token_id=ctx.token_id_yes,
         )
         order_args_no = OrderArgs(
-            token_id=ctx.token_id_no,
             price=buy_price_no,
-            size=self.order_size_usdc / buy_price_no,
+            size=round(self.order_size_usdc / buy_price_no, 2),
             side=BUY,
+            token_id=ctx.token_id_no,
         )
 
+        # El SDK requiere que create_order reciba OrderArgs. 
+        # Importante: create_order en el SDK oficial es sincrónico y firma localmente.
         signed_yes = self.clob.create_order(order_args_yes)
         signed_no  = self.clob.create_order(order_args_no)
 
         elapsed_ms = (time.perf_counter() - t0) * 1000
         logger.info(f"[PRESIGN] Pre-firma completada en {elapsed_ms:.2f}ms")
 
-        if hasattr(self, 'dashboard'):
+        if hasattr(self, 'dashboard') and self.dashboard:
             self.dashboard.add_event("🔒 [PRESIGN] T-60s | Órdenes EIP-712 pre-firmadas en memoria.")
 
         return PreSignedBundle(
@@ -184,6 +187,8 @@ class ExecutionEngine:
             and self._bundle is not None
             and remaining <= FIRE_AT_SECONDS_REMAINING
         ):
+            if hasattr(self, 'dashboard') and self.dashboard:
+                self.dashboard.add_event(f"🎯 [TARGET] T-{int(remaining)}s | Preparando disparo...")
             await self._fire_order(ctx)
 
     async def cleanup(self):

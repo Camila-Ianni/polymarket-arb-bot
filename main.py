@@ -67,8 +67,8 @@ class BotOrchestrator:
         self.order_size_usdc = order_size_usdc
 
         # Componentes (se inicializan en _initialize_components)
-        self.weather_feed: Optional[FastWeatherFeed] = None
-        self.polymarket_monitor: Optional[PolymarketMonitor] = None
+        self.weather_feed = None
+        self.polymarket_monitor = None
         self.risk_manager: Optional[RiskManager] = None
         self.arbitrage_engine: Optional[ArbitrageEngine] = None
         self.chainlink_feed: Optional[ChainlinkRTDSFeed] = None
@@ -196,18 +196,6 @@ class BotOrchestrator:
                 # Verificar componentes
                 issues = []
 
-                if self.weather_feed:
-                    if self.weather_feed.state == WeatherFeedState.HEARTBEAT_TIMEOUT:
-                        issues.append("Weather Feed: heartbeat timeout")
-                    elif self.weather_feed.state == WeatherFeedState.ERROR:
-                        issues.append("Weather Feed: error")
-
-                if self.polymarket_monitor:
-                    if self.polymarket_monitor.state == PolymarketMonitorState.ERROR:
-                        issues.append("Polymarket Monitor: error")
-                    elif self.polymarket_monitor.state == PolymarketMonitorState.RECONNECTING:
-                        issues.append("Polymarket Monitor: reconectando")
-
                 if self.arbitrage_engine:
                     engine_state = getattr(self.arbitrage_engine, 'state', None)
                     if getattr(engine_state, 'name', '') == 'ERROR' or engine_state == getattr(EngineState, 'ERROR', None):
@@ -230,7 +218,6 @@ class BotOrchestrator:
         Ciclo principal de evaluación y simulación (Strict 5 minutes).
         Extrae datos EXCLUSIVAMENTE del CLOB SDK oficial y muestra el Dashboard.
         """
-        import traceback
         from datetime import datetime
 
         logger.info("Iniciando ciclo de evaluación de 5 minutos sobre mercados CLOB...")
@@ -262,9 +249,13 @@ class BotOrchestrator:
                                 last_price=67000.0
                             )
                             
-                            while time.time() < ctx.close_ts:
+                            self.execution_engine.reset()
+                            
+                            while time.time() < ctx.close_ts and self._running:
                                 if self.execution_engine:
-                                    await self.execution_engine.on_price_tick(ctx, 67000.0)
+                                    # Simular una pequeña variación de precio para que el motor evalúe
+                                    current_price = 67000.0 + (time.time() % 10)
+                                    await self.execution_engine.on_price_tick(ctx, current_price)
                                 await asyncio.sleep(1)
                                 
                             continue
@@ -279,8 +270,11 @@ class BotOrchestrator:
                             # 1. Oráculo Nativo: Order Book del CLOB
                             ob = await client.get_order_book(token_id)
                             
-                            best_bid = float(ob.bids[0].price) if hasattr(ob, 'bids') and ob.bids else 0.0
-                            best_ask = float(ob.asks[0].price) if hasattr(ob, 'asks') and ob.asks else 0.0
+                            bids = ob.bids if hasattr(ob, 'bids') else ob.get("bids", [])
+                            asks = ob.asks if hasattr(ob, 'asks') else ob.get("asks", [])
+                            
+                            best_bid = float(bids[0].price) if bids else 0.0
+                            best_ask = float(asks[0].price) if asks else 0.0
                             
                             if best_bid and best_ask:
                                 mid_price = (best_bid + best_ask) / 2
@@ -347,186 +341,46 @@ class BotOrchestrator:
         logger.info("🚀 INICIANDO POLYMARKET ARBITRAGE BOT")
         logger.info("=" * 60)
 
-        start_time = time.time()
+        self._running = True
 
-        # Inicializar componentes
+        # 1. Inicializar componentes
         await self._initialize_components()
 
-        # Configurar signal handlers
+        # 2. Configurar handlers de señales
         self._setup_signal_handlers()
 
-        # Iniciar componentes
-        logger.info("Iniciando componentes...")
-
-        # 3. Iniciar Arbitrage Engine
-        await self.arbitrage_engine.start()
-
-        # 4. Iniciar Chainlink Feed
-        await self.chainlink_feed.start()
-        
-        if hasattr(self, 'dashboard'):
-            await self.dashboard.start()
-
-        # Iniciar tareas de background
-        self._running = True
+        # 3. Iniciar tareas de background
         self._health_check_task = asyncio.create_task(self._health_check_loop())
-        self._metrics_log_task = asyncio.create_task(self._trading_cycle_loop())
+        
+        # 4. Iniciar ciclo principal de trading
+        trading_task = asyncio.create_task(self._trading_cycle_loop())
 
-        init_time = time.time() - start_time
-        logger.info(f"✅ Bot iniciado en {init_time:.2f}s")
-        logger.info("=" * 60)
-
-        # Loguear configuración clave
-        logger.info(f"Modo: {'DRY RUN (simulación)' if self.config.execution.dry_run else 'LIVE (capital real)'}")
-        logger.info(f"Condition ID: {self.config.polymarket.condition_id}")
-        logger.info(f"Market IDs: {self.config.polymarket.market_ids}")
-        logger.info(f"Bet size: ${self.config.trading.bet_size_usd}")
-        logger.info(f"Min ROI: {self.config.trading.min_roi_threshold:.2%}")
-        logger.info(f"Max slippage: {self.config.trading.max_slippage_tolerance:.2%}")
-        logger.info("=" * 60)
-
-        # Esperar señal de shutdown
-        logger.info("Bot corriendo. Presiona Ctrl+C para detener...")
+        # 5. Esperar señal de shutdown
         await self._shutdown_event.wait()
 
-        # Iniciar shutdown
-        await self.stop()
-
-    async def stop(self) -> None:
-        """
-        Detiene todos los componentes gracefulmente.
-
-        Asegura cleanup de recursos y logging final.
-        """
-        logger.info("=" * 60)
-        logger.info("🛑 DETENIENDO BOT...")
-        logger.info("=" * 60)
-
+        # 6. Shutdown graceful
+        logger.info("Iniciando proceso de shutdown...")
         self._running = False
-
-        if hasattr(self, 'dashboard'):
-            await self.dashboard.stop()
-
-        # Detener tareas de background
-        for task in [self._health_check_task, self._metrics_log_task]:
-            if task:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-
-        # Detener componentes en orden inverso a inicialización
-        logger.info("Deteniendo componentes...")
-
-        # Detener Feed primero para evitar nuevas señales
-        if self.chainlink_feed:
-            await self.chainlink_feed.stop()
-
-        # 1. Detener Engine (primero para dejar de generar señales)
-        if self.arbitrage_engine:
-            await self.arbitrage_engine.stop()
-
-        # Loguear métricas finales crudas al log (archivo)
-        if self.arbitrage_engine:
-            logger.info(f"Engine Final Summary: {self.arbitrage_engine.get_engine_summary()}")
-        if self.risk_manager:
-            logger.info(f"Risk Final Summary: {self.risk_manager.get_risk_summary()}")
-
-        # UI HUD Console
-        width = 58
-        print("\n" + "╔" + "═" * width + "╗")
-        print("║" + " 📊 MÉTRICAS FINALES ".center(width) + "║")
-        print("╠" + "═" * width + "╣")
-
-        if self.arbitrage_engine:
-            summary = self.arbitrage_engine.get_engine_summary()
-            print("║" + "  [ENGINE]".ljust(width) + "║")
-            for k, v in summary.items():
-                if isinstance(v, dict): continue
-                line = f"    {k.replace('_', ' ').title():<25}: {v}"
-                print("║" + line.ljust(width) + "║")
-            print("║" + " " * width + "║")
-
-        if self.risk_manager:
-            risk_summary = self.risk_manager.get_risk_summary()
-            print("║" + "  [RISK]".ljust(width) + "║")
-            for k, v in risk_summary.items():
-                if isinstance(v, dict): continue
-                line = f"    {k.replace('_', ' ').title():<25}: {v}"
-                print("║" + line.ljust(width) + "║")
-
-        print("╚" + "═" * width + "╝")
-        print("✅ Apagado del sistema completado.")
+        
+        trading_task.cancel()
+        if self._health_check_task:
+            self._health_check_task.cancel()
+        
+        if self.execution_engine:
+            await self.execution_engine.cleanup()
+            
         logger.info("Bot detenido correctamente")
 
 
-# =============================================================================
-# PUNTO DE ENTRADA PRINCIPAL
-# =============================================================================
-
-async def main(order_size_usdc: float) -> None:
-    """
-    Función main asíncrona.
-
-    Configura logging, carga configuración, y ejecuta el orquestador.
-    """
-    # Cargar configuración
-    config = get_config()
-
-    # Configurar logging
-    setup_logging(
-        log_level=config.execution.log_level,
-        log_file_path=config.execution.log_file_path,
-        enable_json=False,  # True para producción con ELK/Datadog
-    )
-
-    logger.info("Iniciando aplicación...")
-    logger.info(f"Python version: {sys.version}")
-    logger.info(f"Config loaded: dry_run={config.execution.dry_run}")
-
-    # Crear y ejecutar orquestador
-    orchestrator = BotOrchestrator(config, order_size_usdc=order_size_usdc)
-
-    try:
-        await orchestrator.start()
-    except KeyboardInterrupt:
-        logger.info("KeyboardInterrupt recibido")
-    except Exception as e:
-        logger.critical(f"Error crítico: {e}", exc_info=True)
-        raise
-    finally:
-        # Cleanup final
-        logger.info("Cleanup final...")
-
-
-def run() -> None:
-    """
-    Función de entrada para ejecutar desde CLI.
-    """
-    try:
-        # Bloqueo Pre-Inicio
-        while True:
-            try:
-                user_input = input("💰 Ingresa el tamaño de la apuesta por trade (USDC): ")
-                order_size_usdc = float(user_input)
-                if order_size_usdc <= 0:
-                    print("El tamaño de la apuesta debe ser mayor a 0.")
-                    continue
-                break
-            except ValueError:
-                print("Por favor ingresa un número válido.")
-                
-        print("\n⏳ Autenticando con Polymarket y levantando subsistemas, por favor espera...")
-        
-        asyncio.run(main(order_size_usdc))
-    except KeyboardInterrupt:
-        print("\nBot detenido por el usuario")
-        sys.exit(0)
-    except Exception as e:
-        print(f"Error crítico: {e}")
-        sys.exit(1)
-
-
 if __name__ == "__main__":
-    run()
+    # Configurar logging inicial
+    setup_logging(log_level="INFO")
+    
+    orchestrator = BotOrchestrator()
+    try:
+        asyncio.run(orchestrator.start())
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        logger.critical(f"Error fatal: {e}", exc_info=True)
+        sys.exit(1)

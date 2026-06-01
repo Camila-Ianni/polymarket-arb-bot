@@ -34,7 +34,7 @@ class ChainlinkRTDSFeed:
         time_rem = self.market_timer.get_time_remaining() if self.market_timer else 0.0
         # Format explicitly as requested: ║ ⚡ [SIGNAL] T-8.5s | BTC: $67,234.50 | Δ: +0.12% → UP ║
         sign = "+" if delta_pct >= 0 else ""
-        print(f"║ ⚡ [SIGNAL] T-{time_rem:.1f}s | BTC: ${price:,.2f} | Δ: {sign}{delta_pct:.2f}% → {direction} ║".ljust(59) + "║")
+        logger.info(f"⚡ [SIGNAL] T-{time_rem:.1f}s | BTC: ${price:,.2f} | Δ: {sign}{delta_pct:.2f}% → {direction}")
 
     async def start(self):
         self._running = True

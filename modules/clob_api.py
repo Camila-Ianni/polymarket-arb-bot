@@ -55,15 +55,38 @@ class PolymarketClobClient:
         """No es necesario cerrar explícitamente en el SDK sincrónico, pero mantenemos compatibilidad."""
         pass
 
-    async def get_order_book(self, market_id: str) -> dict:
+    async def get_order_book(self, market_id: str) -> Any:
         """Obtiene el OrderBook directamente desde el CLOB via SDK."""
+        # Fix del Simulador: Forzar Orderbook falso si es el mercado simulado
+        if market_id == "0xSIMULATED_CONDITION_ID" or (isinstance(market_id, dict) and market_id.get("condition_id") == "0xSIMULATED_CONDITION_ID"):
+            from dataclasses import dataclass
+            from typing import List
+
+            @dataclass
+            class FakeLevel:
+                price: str
+                size: str
+
+            @dataclass
+            class FakeOrderBook:
+                bids: List[FakeLevel]
+                asks: List[FakeLevel]
+
+            # Forzamos un spread que resulte en un ROI alto (ej. bid 0.40, ask 0.60)
+            # Para arbitraje de libro, un spread amplio es mejor.
+            # Pero el bot busca "Maker" orders, así que simulamos un spread saludable.
+            return FakeOrderBook(
+                bids=[FakeLevel(price="0.45", size="1000")],
+                asks=[FakeLevel(price="0.55", size="1000")]
+            )
+
         return await self._execute_with_backoff(self.client.get_order_book, market_id)
 
     async def place_order(self, market_id: str, side: Side, price: float, size: float, order_type: SDKOrderType = SDKOrderType.GTC) -> dict:
         """Coloca una orden utilizando el SDK oficial."""
         if self.dry_run:
             logger.info(f"🔮 [DRY RUN - SDK] Orden {order_type} {side.value} | Precio: {price} | Tamaño: {size}")
-            return {"status": "simulated", "order_id": f"sim_{time.time_ns()}"}
+            return {"status": "simulated", "order_id": f"sim_{time.time_ns()}", "success": True}
 
         order_args = OrderArgs(
             price=price,
@@ -84,7 +107,7 @@ class PolymarketClobClient:
     async def cancel_order(self, order_id: str) -> dict:
         if self.dry_run:
             logger.info(f"🔮 [DRY RUN - SDK] Cancelando orden {order_id}")
-            return {"status": "simulated_cancel"}
+            return {"status": "simulated_cancel", "success": True}
         return await self._execute_with_backoff(self.client.cancel, order_id)
 
     async def _execute_with_backoff(self, func, *args, **kwargs):
@@ -124,3 +147,5 @@ class PolymarketClobClient:
                 await asyncio.sleep(1)
 
         raise RuntimeError("Máximo de reintentos excedido en llamadas al SDK py-clob-client.")
+
+from typing import Any
