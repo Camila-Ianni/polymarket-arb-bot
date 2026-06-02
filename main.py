@@ -370,18 +370,26 @@ if __name__ == "__main__":
     try:
         asyncio.run(orchestrator.start())
     except KeyboardInterrupt:
-        print("\n" + "="*50)
-        print("📊 RESUMEN FINAL DE LA SESIÓN")
-        print("="*50)
-        if hasattr(orchestrator, 'arbitrage_engine') and orchestrator.arbitrage_engine:
-            metrics = getattr(orchestrator.arbitrage_engine, '_metrics', None)
-            if metrics:
-                print(f"   Operaciones ejecutadas : {metrics.opportunities_executed}")
-        if hasattr(orchestrator, 'risk_manager') and orchestrator.risk_manager:
-            pnl = getattr(orchestrator.risk_manager, '_total_pnl_usd', 0.0)
-            print(f"   Wallet PnL Final       : ${pnl:.2f}")
-        print("="*50)
-        print("Bot detenido por el usuario.\n")
+        pass
     except Exception as e:
         logger.critical(f"Error fatal: {e}", exc_info=True)
         sys.exit(1)
+        
+    print("\n" + "="*50)
+    print("📊 RESUMEN FINAL DE LA SESIÓN")
+    print("="*50)
+    if hasattr(orchestrator, 'arbitrage_engine') and orchestrator.arbitrage_engine:
+        metrics = getattr(orchestrator.arbitrage_engine, '_metrics', None)
+        if metrics:
+            print(f"   Operaciones ejecutadas : {metrics.opportunities_executed}")
+            
+    if hasattr(orchestrator, 'risk_manager') and orchestrator.risk_manager:
+        pnl = getattr(orchestrator.risk_manager, '_total_pnl_usd', 0.0)
+        wins = getattr(orchestrator.risk_manager.metrics, 'total_wins', 0)
+        losses = getattr(orchestrator.risk_manager.metrics, 'total_losses', 0)
+        
+        print(f"   Win/Loss               : {wins}W - {losses}L")
+        print(f"   Wallet PnL Final       : ${pnl:.2f}")
+        print(f"   Wallet Trust (Sim)     : ${1000.00 + float(pnl):.2f}")
+    print("="*50)
+    print("Bot detenido.\n")
