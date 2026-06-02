@@ -28,30 +28,54 @@ def _is_btc_5min(title: str, slug: str = "") -> bool:
         return True
     return False
 
-def _extract_market_fields(market: Dict[str, Any], title: str) -> Tuple[Optional[str], str]:
+def _extract_market_fields(market: Dict[str, Any], title: str, event_end: str = "") -> Tuple[Optional[Dict[str, Any]], str]:
     if not market.get('active') or market.get('closed'):
         return None, ""
     clob_ids = market.get('clobTokenIds', [])
+    condition_id = market.get('conditionId', '')
     if clob_ids:
         try:
             if isinstance(clob_ids, str):
                 clob_ids = json.loads(clob_ids)
-            if isinstance(clob_ids, list) and len(clob_ids) > 0:
-                return clob_ids[0], market.get('question', title)
+            if isinstance(clob_ids, list) and len(clob_ids) >= 2:
+                # Calcular close_ts si hay event_end
+                close_ts = time.time() + 50.0  # Default 50s as user requested
+                if event_end:
+                    try:
+                        # event_end format: '2024-06-02T03:35:00Z'
+                        dt = datetime.strptime(event_end.replace("Z", "+0000"), "%Y-%m-%dT%H:%M:%S%z")
+                        close_ts = dt.timestamp()
+                    except:
+                        pass
+                
+                market_dict = {
+                    "condition_id": condition_id,
+                    "token_id_yes": clob_ids[0],
+                    "token_id_no": clob_ids[1],
+                    "close_ts": close_ts,
+                    "question": market.get('question', title)
+                }
+                return market_dict, market_dict["question"]
         except Exception as e:
             logger.warning(f"Error parseando clobTokenIds: {e}")
     return None, ""
 
-def _extract_clob_market(market: Dict[str, Any]) -> Tuple[Optional[str], str]:
+def _extract_clob_market(market: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], str]:
     if not market.get('active') or market.get('closed'):
         return None, ""
     question = market.get('question', '')
     if _is_btc_5min(question):
         tokens = market.get('tokens', [])
-        if tokens:
-            tid = tokens[0].get('token_id')
-            if tid:
-                return tid, question
+        condition_id = market.get('condition_id', '')
+        if tokens and len(tokens) >= 2:
+            market_dict = {
+                "condition_id": condition_id,
+                "token_id_yes": tokens[0].get('token_id'),
+                "token_id_no": tokens[1].get('token_id'),
+                "close_ts": time.time() + 50.0,  # default 50s
+                "question": question
+            }
+            return market_dict, question
     return None, ""
 
 class MarketScanner:
@@ -75,11 +99,12 @@ class MarketScanner:
                         slug = event.get('slug', '')
                         if _is_btc_5min(title, slug):
                             markets = event.get('markets', [])
+                            event_end = event.get('endDate', '')
                             for market in markets:
-                                tid, name = _extract_market_fields(market, title)
-                                if tid:
+                                market_dict, name = _extract_market_fields(market, title, event_end)
+                                if market_dict:
                                     logger.info(f"Mercado encontrado vía Gamma: {name}")
-                                    return tid, name
+                                    return market_dict, name
         except Exception as e:
             logger.warning(f"Error en _fetch_gamma: {e}")
         return None, ""
@@ -92,10 +117,10 @@ class MarketScanner:
                     data = await response.json()
                     markets = data.get('data', [])
                     for market in markets:
-                        tid, name = _extract_clob_market(market)
-                        if tid:
+                        market_dict, name = _extract_clob_market(market)
+                        if market_dict:
                             logger.info(f"Mercado encontrado vía CLOB Fallback: {name}")
-                            return tid, name
+                            return market_dict, name
         except Exception as e:
             logger.warning(f"Error en _fetch_clob: {e}")
         return None, ""
@@ -117,19 +142,5 @@ class MarketScanner:
         if tid:
             return tid, name
             
-        # Fallback de testing
-        config = get_config()
-        if config.execution.dry_run:
-            simulated_market = {
-                "condition_id": "0xSIMULATED_CONDITION_ID",
-                "token_id_yes": "1111111111",
-                "token_id_no": "2222222222",
-                "close_ts": time.time() + 90.0,
-                "question": "⚠️ [SIMULACIÓN] BTC cerrará por encima de X?"
-            }
-            if self.dashboard:
-                self.dashboard.add_event("[SCANNER] ⚠️ Inyectando mercado de prueba (DRY_RUN)...")
-            return simulated_market, simulated_market["question"]
-            
-        logger.info("No se encontró ningún mercado activo de BTC a 5 minutos.")
+        logger.info("No se encontró ningún mercado activo de BTC a 5 minutos. Reintentando...")
         return None, ""
