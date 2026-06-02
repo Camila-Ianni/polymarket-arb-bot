@@ -251,9 +251,9 @@ class BotOrchestrator:
                             token_id_no=token_id["token_id_no"],
                             open_ts=time.time(), # Real open is earlier, but we start tracking now
                             open_price=initial_price,
-                            last_price=initial_price
+                            last_price=initial_price,
+                            close_ts=token_id.get("close_ts", time.time() + 50.0)
                         )
-                        ctx.close_ts = token_id.get("close_ts", time.time() + 50.0)
                         
                         self.execution_engine.reset()
                         self.execution_engine.current_ctx = ctx
