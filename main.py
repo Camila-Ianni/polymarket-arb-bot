@@ -134,15 +134,9 @@ class BotOrchestrator:
             
             # Conectar Feed con ExecutionEngine
             async def _on_price_tick(price: float, delta: float, direction: str):
-                if self.chainlink_feed and self.chainlink_feed.market_timer:
-                    ctx = MarketContext(
-                        condition_id="simulated",
-                        token_id_yes="12345",
-                        token_id_no="67890",
-                        open_ts=self.chainlink_feed.market_timer.start_time,
-                        open_price=self.chainlink_feed.last_price,
-                        last_price=price,
-                    )
+                if self.execution_engine and hasattr(self.execution_engine, 'current_ctx') and self.execution_engine.current_ctx:
+                    ctx = self.execution_engine.current_ctx
+                    # Actualiza price in context
                     await self.execution_engine.on_price_tick(ctx, price)
                     
                     if hasattr(self, 'dashboard'):
@@ -234,77 +228,42 @@ class BotOrchestrator:
                         
                     token_id, market_name = await self.scanner.get_active_btc_5min_market()
                     
-                    if token_id:
-                        if isinstance(token_id, dict) and token_id.get("condition_id") == "0xSIMULATED_CONDITION_ID":
-                            if hasattr(self, 'dashboard'):
-                                self.dashboard.add_event(f"[{ts}] [SIMULADOR] Reloj interno corriendo (90s)...")
-                            
-                            # Set open_ts to time.time() - 210 so close_ts (open_ts + 300) is in 90 seconds
-                            ctx = MarketContext(
-                                condition_id=token_id["condition_id"],
-                                token_id_yes=token_id["token_id_yes"],
-                                token_id_no=token_id["token_id_no"],
-                                open_ts=time.time() - 210.0,
-                                open_price=67000.0,
-                                last_price=67000.0
-                            )
-                            
-                            self.execution_engine.reset()
-                            
-                            while time.time() < ctx.close_ts and self._running:
-                                if self.execution_engine:
-                                    try:
-                                        # Simular una pequeña variación de precio para que el motor evalúe
-                                        current_price = 67000.0 + (time.time() % 10)
-                                        await self.execution_engine.on_price_tick(ctx, current_price)
-                                    except Exception as e:
-                                        logger.error(f"Error en on_price_tick simulado: {e}", exc_info=True)
-                                        if hasattr(self, 'dashboard'):
-                                            self.dashboard.add_event(f"❌ CRASH INTERNO: {e}")
-                                await asyncio.sleep(1)
-                                
-                            continue
-
+                    if token_id and isinstance(token_id, dict):
+                        is_sim = (token_id.get("condition_id") == "0xSIMULATED_CONDITION_ID")
+                        
                         if hasattr(self, 'dashboard'):
-                            self.dashboard.add_event(f"[{ts}] Mercado enganchado: {market_name[:30]}...")
-                            
+                            if is_sim:
+                                self.dashboard.add_event(f"[{ts}] [SIMULADOR] Reloj interno corriendo...")
+                            else:
+                                self.dashboard.add_event(f"[{ts}] Mercado enganchado: {market_name[:30]}...")
+                        
+                        # Iniciar timer para dashboard
                         if self.chainlink_feed and not self.chainlink_feed.market_timer:
+                            # Start time could be calculated from open_ts, but we just use it for display
                             self.chainlink_feed.set_market_timer(MarketTimer(start_time=time.time()))
                             
-                        try:
-                            # 1. Oráculo Nativo: Order Book del CLOB
-                            ob = await client.get_order_book(token_id)
+                        # Usar el precio de Binance como open_price
+                        initial_price = self.chainlink_feed.last_price if self.chainlink_feed else 67000.0
+                        
+                        ctx = MarketContext(
+                            condition_id=token_id["condition_id"],
+                            token_id_yes=token_id["token_id_yes"],
+                            token_id_no=token_id["token_id_no"],
+                            open_ts=time.time(), # Real open is earlier, but we start tracking now
+                            open_price=initial_price,
+                            last_price=initial_price
+                        )
+                        ctx.close_ts = token_id.get("close_ts", time.time() + 50.0)
+                        
+                        self.execution_engine.reset()
+                        self.execution_engine.current_ctx = ctx
+                        
+                        # El WS de Binance actualizará el feed y llamará a on_price_tick asíncronamente
+                        # Nosotros solo esperamos a que termine el mercado
+                        while time.time() < ctx.close_ts and self._running:
+                            await asyncio.sleep(1)
                             
-                            bids = ob.bids if hasattr(ob, 'bids') else ob.get("bids", [])
-                            asks = ob.asks if hasattr(ob, 'asks') else ob.get("asks", [])
-                            
-                            best_bid = float(bids[0].price) if bids else 0.0
-                            best_ask = float(asks[0].price) if asks else 0.0
-                            
-                            if best_bid and best_ask:
-                                mid_price = (best_bid + best_ask) / 2
-                                spread = best_ask - best_bid
-                                
-                                # Simulación de orden Maker
-                                order_status = "Maker POST_ONLY Emitida" if spread > 0.01 else "Spread Insuficiente"
-                                
-                                # Simulamos la colocación si spread es bueno
-                                if spread > 0.01:
-                                    await client.place_order(token_id, "BUY", best_bid + 0.001, 5.0)
-                            else:
-                                mid_price = 0.0
-                                spread = 0.0
-                                order_status = "Sin Liquidez (Ignorado)"
-                                
-                            short_name = "BTC 5m"
-                            if hasattr(self, 'dashboard'):
-                                self.dashboard.add_event(f"[{ts}] {short_name} | Mid: {mid_price:.4f} | Status: {order_status}")
-                            
-                        except Exception as e:
-                            # Manejo Estricto de Errores
-                            logger.error(f"Error en CLOB eval: {e}", exc_info=True)
-                            if hasattr(self, 'dashboard'):
-                                self.dashboard.add_event(f"[{ts}] Error evaluando CLOB: {str(e)[:40]}")
+                        continue
 
                 await asyncio.sleep(300)  # Strict 5 minutes
 
@@ -356,6 +315,8 @@ class BotOrchestrator:
 
         # 3. Iniciar tareas de background
         self._health_check_task = asyncio.create_task(self._health_check_loop())
+        if self.chainlink_feed:
+            asyncio.create_task(self.chainlink_feed.start())
         
         # 4. Iniciar ciclo principal de trading
         trading_task = asyncio.create_task(self._trading_cycle_loop())
