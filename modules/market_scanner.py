@@ -80,7 +80,7 @@ def _extract_clob_market(market: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
 
 class MarketScanner:
     def __init__(self, dashboard=None):
-        self.gamma_url = "https://gamma-api.polymarket.com/events?active=true&closed=false"
+        self.gamma_url = "https://gamma-api.polymarket.com/events?series_slug=btc-up-or-down-5m&active=true&closed=false"
         self.clob_url = "https://clob.polymarket.com/markets"
         self.dashboard = dashboard
 
