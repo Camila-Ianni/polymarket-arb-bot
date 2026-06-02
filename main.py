@@ -390,6 +390,6 @@ if __name__ == "__main__":
         
         print(f"   Win/Loss               : {wins}W - {losses}L")
         print(f"   Wallet PnL Final       : ${pnl:.2f}")
-        print(f"   Wallet Trust (Sim)     : ${1000.00 + float(pnl):.2f}")
+        print(f"   Wallet Trust (Sim)     : ${0.99 + float(pnl):.2f}")
     print("="*50)
     print("Bot detenido.\n")
