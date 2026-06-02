@@ -381,11 +381,33 @@ if __name__ == "__main__":
     # Configurar logging inicial
     setup_logging(log_level="INFO")
     
-    orchestrator = BotOrchestrator()
+    capital_input = input("💰 Ingresa el tamaño de la apuesta por trade (USDC): ")
+    try:
+        order_size_usdc = float(capital_input)
+    except ValueError:
+        print("Valor inválido. Se usará el tamaño por defecto de 20.0 USDC.")
+        order_size_usdc = 20.0
+        
+    print("⏳ Autenticando SDK y cargando variables...")
+    
+    config = get_config()
+    orchestrator = BotOrchestrator(config=config, order_size_usdc=order_size_usdc)
+    
     try:
         asyncio.run(orchestrator.start())
     except KeyboardInterrupt:
-        pass
+        print("\n" + "="*50)
+        print("📊 RESUMEN FINAL DE LA SESIÓN")
+        print("="*50)
+        if hasattr(orchestrator, 'arbitrage_engine') and orchestrator.arbitrage_engine:
+            metrics = getattr(orchestrator.arbitrage_engine, '_metrics', None)
+            if metrics:
+                print(f"   Operaciones ejecutadas : {metrics.opportunities_executed}")
+        if hasattr(orchestrator, 'risk_manager') and orchestrator.risk_manager:
+            pnl = getattr(orchestrator.risk_manager, '_total_pnl_usd', 0.0)
+            print(f"   Wallet PnL Final       : ${pnl:.2f}")
+        print("="*50)
+        print("Bot detenido por el usuario.\n")
     except Exception as e:
         logger.critical(f"Error fatal: {e}", exc_info=True)
         sys.exit(1)

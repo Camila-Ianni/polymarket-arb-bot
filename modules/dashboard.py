@@ -69,11 +69,40 @@ class DashboardRenderer:
         lines.append("║" + header.ljust(width - 2) + "║")
         lines.append("╠" + "═" * (width - 2) + "╣")
         
+        # Market Status variables
+        import time
+        round_info = "1"
+        t_minus = "N/A"
+        money_used = "0.00"
+        btc_price = "0.00"
+        
+        if hasattr(self.orchestrator, 'arbitrage_engine') and self.orchestrator.arbitrage_engine:
+            metrics = getattr(self.orchestrator.arbitrage_engine, '_metrics', None)
+            if metrics:
+                round_info = str(metrics.opportunities_executed + 1)
+                
+        if hasattr(self.orchestrator, 'execution_engine') and self.orchestrator.execution_engine:
+            ee = self.orchestrator.execution_engine
+            if hasattr(ee, 'order_size_usdc'):
+                money_used = f"{ee.order_size_usdc:.2f}"
+            if hasattr(ee, 'current_ctx') and ee.current_ctx:
+                ctx = ee.current_ctx
+                remaining = max(0, ctx.close_ts - time.time())
+                t_minus = f"{int(remaining)}s"
+                btc_price = f"{ctx.last_price:,.2f}"
+
         # Métricas principales
         metrics1 = f"  Wallet PnL : ${pnl} | Execution Mode: FOK (Maker)"
         metrics2 = f"  Asset      : BTC/USD 5m | Strategy: Front-Running EIP-712"
         lines.append("║" + metrics1.ljust(width - 2) + "║")
         lines.append("║" + metrics2.ljust(width - 2) + "║")
+        lines.append("╠" + "═" * (width - 2) + "╣")
+        
+        # Dinámica de Ronda
+        dyn1 = f"  Round      : #{round_info} | T-Minus: {t_minus}"
+        dyn2 = f"  BTC Price  : ${btc_price} | Capital: ${money_used} USDC"
+        lines.append("║" + dyn1.ljust(width - 2) + "║")
+        lines.append("║" + dyn2.ljust(width - 2) + "║")
         lines.append("╠" + "═" * (width - 2) + "╣")
         
         # Telemetría

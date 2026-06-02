@@ -201,6 +201,7 @@ class ExecutionEngine:
         self._presigned = False
 
     async def on_price_tick(self, ctx: MarketContext, price: float):
+        self.current_ctx = ctx
         ctx.last_price = price
         remaining = ctx.seconds_remaining()
 
