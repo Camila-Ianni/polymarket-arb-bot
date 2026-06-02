@@ -93,8 +93,16 @@ class DashboardRenderer:
                 btc_price = f"{ctx.last_price:,.2f}"
 
         # Métricas principales
-        metrics1 = f"  Wallet PnL : ${pnl} | Execution Mode: FOK (Maker)"
-        metrics2 = f"  Asset      : BTC/USD 5m | Strategy: Front-Running EIP-712"
+        wins = 0
+        losses = 0
+        if hasattr(self.orchestrator, 'risk_manager') and self.orchestrator.risk_manager:
+            wins = getattr(self.orchestrator.risk_manager.metrics, 'total_wins', 0)
+            losses = getattr(self.orchestrator.risk_manager.metrics, 'total_losses', 0)
+            
+        wallet_bal = 1000.00 + float(pnl)
+        
+        metrics1 = f"  Wallet Bal : ${wallet_bal:.2f} (PnL: ${pnl}) | Execution Mode: FOK (Maker)"
+        metrics2 = f"  Win/Loss   : {wins}W - {losses}L | Asset: BTC/USD 5m | Strat: EIP-712"
         lines.append("║" + metrics1.ljust(width - 2) + "║")
         lines.append("║" + metrics2.ljust(width - 2) + "║")
         lines.append("╠" + "═" * (width - 2) + "╣")

@@ -94,6 +94,7 @@ class MarketScanner:
                     response.raise_for_status()
                     data = await response.json()
                     
+                    valid_markets = []
                     for event in data:
                         title = event.get('title', '')
                         slug = event.get('slug', '')
@@ -103,8 +104,16 @@ class MarketScanner:
                             for market in markets:
                                 market_dict, name = _extract_market_fields(market, title, event_end)
                                 if market_dict:
-                                    logger.info(f"Mercado encontrado vía Gamma: {name}")
-                                    return market_dict, name
+                                    time_remaining = market_dict["close_ts"] - time.time()
+                                    if 0 < time_remaining < 3600: # Cierra en los próximos 60 minutos
+                                        valid_markets.append((time_remaining, market_dict, name))
+                                        
+                    if valid_markets:
+                        # Ordenar por el que cierra más pronto
+                        valid_markets.sort(key=lambda x: x[0])
+                        best_market = valid_markets[0]
+                        logger.info(f"Mercado encontrado vía Gamma: {best_market[2]} (cierra en {best_market[0]:.0f}s)")
+                        return best_market[1], best_market[2]
         except Exception as e:
             logger.warning(f"Error en _fetch_gamma: {e}")
         return None, ""
@@ -116,11 +125,19 @@ class MarketScanner:
                     response.raise_for_status()
                     data = await response.json()
                     markets = data.get('data', [])
+                    valid_markets = []
                     for market in markets:
                         market_dict, name = _extract_clob_market(market)
                         if market_dict:
-                            logger.info(f"Mercado encontrado vía CLOB Fallback: {name}")
-                            return market_dict, name
+                            time_remaining = market_dict["close_ts"] - time.time()
+                            if 0 < time_remaining < 3600:
+                                valid_markets.append((time_remaining, market_dict, name))
+                                
+                    if valid_markets:
+                        valid_markets.sort(key=lambda x: x[0])
+                        best_market = valid_markets[0]
+                        logger.info(f"Mercado encontrado vía CLOB Fallback: {best_market[2]} (cierra en {best_market[0]:.0f}s)")
+                        return best_market[1], best_market[2]
         except Exception as e:
             logger.warning(f"Error en _fetch_clob: {e}")
         return None, ""
