@@ -68,6 +68,18 @@ class ExecutionEngine:
         return self._session
 
     def _presign_orders(self, ctx: MarketContext) -> PreSignedBundle:
+        if ctx.condition_id == "0xSIMULATED_CONDITION_ID":
+            if hasattr(self, 'dashboard') and self.dashboard is not None:
+                self.dashboard.add_event("⚡ [PRESIGN] Firmas simuladas generadas en memoria (Bypass SDK)")
+            self._presigned = True
+            return PreSignedBundle(
+                signed_yes={"simulated": True, "side": "YES"},
+                signed_no={"simulated": True, "side": "NO"},
+                created_at=time.time(),
+                presign_price_yes=0.50,
+                presign_price_no=0.50,
+            )
+
         t0 = time.perf_counter()
 
         current_price_yes = ctx.last_price
