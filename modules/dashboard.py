@@ -99,7 +99,7 @@ class DashboardRenderer:
             wins = getattr(self.orchestrator.risk_manager.metrics, 'total_wins', 0)
             losses = getattr(self.orchestrator.risk_manager.metrics, 'total_losses', 0)
             
-        wallet_bal = 0.99 + float(pnl)
+        wallet_bal = 1.64 + float(pnl)
         
         metrics1 = f"  Wallet Bal : ${wallet_bal:.2f} (PnL: ${pnl}) | Execution Mode: FOK (Maker)"
         metrics2 = f"  Win/Loss   : {wins}W - {losses}L | Asset: BTC/USD 5m | Strat: EIP-712"
