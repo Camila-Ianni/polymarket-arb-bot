@@ -127,7 +127,7 @@ class BotOrchestrator:
 
             # 5. Execution Engine (EIP-712 pre-signing)
             self.execution_engine = ExecutionEngine(
-                clob_client=self.arbitrage_engine.clob_client,
+                clob_client=self.arbitrage_engine.clob_client.client,
                 config=self.config,
                 order_size_usdc=self.order_size_usdc
             )
@@ -253,9 +253,14 @@ class BotOrchestrator:
                             
                             while time.time() < ctx.close_ts and self._running:
                                 if self.execution_engine:
-                                    # Simular una pequeña variación de precio para que el motor evalúe
-                                    current_price = 67000.0 + (time.time() % 10)
-                                    await self.execution_engine.on_price_tick(ctx, current_price)
+                                    try:
+                                        # Simular una pequeña variación de precio para que el motor evalúe
+                                        current_price = 67000.0 + (time.time() % 10)
+                                        await self.execution_engine.on_price_tick(ctx, current_price)
+                                    except Exception as e:
+                                        logger.error(f"Error en on_price_tick simulado: {e}", exc_info=True)
+                                        if hasattr(self, 'dashboard'):
+                                            self.dashboard.add_event(f"❌ CRASH INTERNO: {e}")
                                 await asyncio.sleep(1)
                                 
                             continue

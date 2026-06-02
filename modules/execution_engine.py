@@ -97,8 +97,9 @@ class ExecutionEngine:
 
         # El SDK requiere que create_order reciba OrderArgs. 
         # Importante: create_order en el SDK oficial es sincrónico y firma localmente.
-        signed_yes = self.clob.create_order(order_args_yes)
-        signed_no  = self.clob.create_order(order_args_no)
+        options = {"tick_size": "0.01"}
+        signed_yes = self.clob.create_order(order_args_yes, options)
+        signed_no  = self.clob.create_order(order_args_no, options)
 
         elapsed_ms = (time.perf_counter() - t0) * 1000
         logger.info(f"[PRESIGN] Pre-firma completada en {elapsed_ms:.2f}ms")
@@ -179,35 +180,41 @@ class ExecutionEngine:
             # Si hubiera validación de ROI aquí, simulated_roi asegura que pase el min_roi (8%)
             pass
 
-        if not self._presigned and remaining <= PRESIGN_AT_SECONDS_REMAINING:
-            self._presigned = True
-            loop = asyncio.get_event_loop()
-            self._bundle = await loop.run_in_executor(None, self._presign_orders, ctx)
+        try:
+            if not self._presigned and remaining <= PRESIGN_AT_SECONDS_REMAINING:
+                self._presigned = True
+                loop = asyncio.get_event_loop()
+                self._bundle = await loop.run_in_executor(None, self._presign_orders, ctx)
 
-        elif (
-            self._presigned
-            and not self._fired
-            and self._bundle is not None
-            and remaining > FIRE_AT_SECONDS_REMAINING
-        ):
-            # FIX: Prevenir que el simulador caiga en bucle infinito de re-firma
-            if ctx.condition_id == "0xSIMULATED_CONDITION_ID":
-                pass
-            else:
-                # Calculo de drift corregido (0.05 equivale a 5 centavos de Polymarket)
-                price_drift = abs(price - self._bundle.presign_price_yes)
-                if price_drift > 0.05:
-                    logger.info(f"[PRESIGN] Precio derivó {price_drift:.2f} → re-firmando")
-                    self._presigned = False
+            elif (
+                self._presigned
+                and not self._fired
+                and self._bundle is not None
+                and remaining > FIRE_AT_SECONDS_REMAINING
+            ):
+                # FIX: Prevenir que el simulador caiga en bucle infinito de re-firma
+                if ctx.condition_id == "0xSIMULATED_CONDITION_ID":
+                    pass
+                else:
+                    # Calculo de drift corregido (0.05 equivale a 5 centavos de Polymarket)
+                    price_drift = abs(price - self._bundle.presign_price_yes)
+                    if price_drift > 0.05:
+                        logger.info(f"[PRESIGN] Precio derivó {price_drift:.2f} → re-firmando")
+                        self._presigned = False
 
-        if (
-            not self._fired
-            and self._bundle is not None
-            and remaining <= FIRE_AT_SECONDS_REMAINING
-        ):
+            if (
+                not self._fired
+                and self._bundle is not None
+                and remaining <= FIRE_AT_SECONDS_REMAINING
+            ):
+                if hasattr(self, 'dashboard') and self.dashboard is not None:
+                    self.dashboard.add_event(f"🎯 [TARGET] T-{int(remaining)}s | Preparando disparo...")
+                await self._fire_order(ctx)
+        except Exception as e:
+            logger.error(f"[EXECUTION ENGINE] Error crítico en on_price_tick: {e}", exc_info=True)
             if hasattr(self, 'dashboard') and self.dashboard is not None:
-                self.dashboard.add_event(f"🎯 [TARGET] T-{int(remaining)}s | Preparando disparo...")
-            await self._fire_order(ctx)
+                self.dashboard.add_event(f"❌ CRASH EJECUCIÓN: {e}")
+            raise e
 
     async def cleanup(self):
         if self._session and not self._session.closed:
