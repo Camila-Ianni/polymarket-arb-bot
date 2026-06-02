@@ -7,6 +7,7 @@ import asyncio
 import time
 import logging
 from enum import Enum
+from typing import Any
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import OrderArgs, OrderType as SDKOrderType, ApiCreds
 from py_clob_client.exceptions import PolyApiException
@@ -147,5 +148,3 @@ class PolymarketClobClient:
                 await asyncio.sleep(1)
 
         raise RuntimeError("Máximo de reintentos excedido en llamadas al SDK py-clob-client.")
-
-from typing import Any
