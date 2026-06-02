@@ -97,7 +97,12 @@ class ExecutionEngine:
 
         # El SDK requiere que create_order reciba OrderArgs. 
         # Importante: create_order en el SDK oficial es sincrónico y firma localmente.
-        options = {"tick_size": "0.01"}
+        class OrderOptions:
+            def __init__(self):
+                self.tick_size = "0.01"
+                self.neg_risk = False
+                
+        options = OrderOptions()
         signed_yes = self.clob.create_order(order_args_yes, options)
         signed_no  = self.clob.create_order(order_args_no, options)
 
