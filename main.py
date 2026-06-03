@@ -277,6 +277,10 @@ class BotOrchestrator:
                                 self.dashboard.add_event("✅ ¡Resolución oficial recibida! Resultado: WIN")
                                 self.dashboard.add_event(f"💸 Reclamando y enviando ${amount_won:.2f} USDC a Trust Wallet...")
                                 self.dashboard.add_event(f"🏦 TX Transferencia: 0x{int(time.time())}abc... Completada")
+                                
+                                if hasattr(self, 'risk_manager') and self.risk_manager:
+                                    from decimal import Decimal
+                                    self.risk_manager.metrics.record_win(Decimal(str(self.order_size_usdc)))
                         else:
                             if hasattr(self, 'dashboard'):
                                 self.dashboard.add_event("Mercado finalizado (Sin ejecuciones previas).")
@@ -361,8 +365,8 @@ if __name__ == "__main__":
     # Configurar logging inicial
     setup_logging(log_level="INFO")
     
-    print("Fijando tamaño de apuesta en 0.70 USDC")
-    order_size_usdc = 0.70
+    print("Fijando tamaño de apuesta en 0.69 USDC")
+    order_size_usdc = 0.69
     
     config = get_config()
     orchestrator = BotOrchestrator(config=config, order_size_usdc=order_size_usdc)
@@ -390,6 +394,6 @@ if __name__ == "__main__":
         
         print(f"   Win/Loss               : {wins}W - {losses}L")
         print(f"   Wallet PnL Final       : ${pnl:.2f}")
-        print(f"   Wallet Trust (Sim)     : ${1.64 + float(pnl):.2f}")
+        print(f"   Wallet Trust (Sim)     : ${0.69 + float(pnl):.2f}")
     print("="*50)
     print("Bot detenido.\n")
