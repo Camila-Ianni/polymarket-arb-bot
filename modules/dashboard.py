@@ -91,6 +91,8 @@ class DashboardRenderer:
                 remaining = max(0, ctx.close_ts - time.time())
                 t_minus = f"{int(remaining)}s"
                 btc_price = f"{ctx.last_price:,.2f}"
+            elif hasattr(self.orchestrator, 'chainlink_feed') and self.orchestrator.chainlink_feed:
+                btc_price = f"{self.orchestrator.chainlink_feed.last_price:,.2f}"
 
         # Métricas principales
         wins = 0
