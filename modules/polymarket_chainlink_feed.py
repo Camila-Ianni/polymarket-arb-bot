@@ -24,8 +24,8 @@ class ChainlinkRTDSFeed:
         self._running = False
         self._task: Optional[asyncio.Task] = None
         
-        # Estado mock para simular precios y variaciones
-        self.last_price = 67200.00
+        # Estado para almacenar precios y variaciones
+        self.last_price = 0.0
     
     def set_market_timer(self, timer: MarketTimer):
         self.market_timer = timer
@@ -49,21 +49,28 @@ class ChainlinkRTDSFeed:
 
     async def _binance_feed_loop(self):
         """
-        Conecta al WebSocket de Binance para obtener precios reales de BTC en vivo.
-        Actualiza el estado interno para el Dashboard y emite señales si hay un mercado activo.
+        Conecta al WebSocket de Coinbase (como alternativa a Binance) para evitar
+        bloqueos geográficos (HTTP 451) cuando se usa VPN.
         """
-        ws_url = "wss://stream.binance.com:9443/ws/btcusdt@miniTicker"
+        ws_url = "wss://ws-feed.exchange.coinbase.com"
+        subscribe_msg = {
+            "type": "subscribe",
+            "product_ids": ["BTC-USD"],
+            "channels": ["ticker"]
+        }
         
         while self._running:
             try:
                 async with websockets.connect(ws_url, ping_interval=10, ping_timeout=5) as ws:
-                    logger.debug("Conectado a Binance WebSocket (BTCUSDT)")
+                    await ws.send(json.dumps(subscribe_msg))
+                    logger.debug("Conectado a Coinbase WebSocket (BTC-USD)")
+                    
                     while self._running:
                         msg = await ws.recv()
                         data = json.loads(msg)
                         
-                        if "c" in data:
-                            new_price = float(data["c"])
+                        if data.get("type") == "ticker" and "price" in data:
+                            new_price = float(data["price"])
                             
                             if self.last_price > 0:
                                 variation = ((new_price - self.last_price) / self.last_price) * 100
@@ -73,7 +80,6 @@ class ChainlinkRTDSFeed:
                             self.last_price = new_price
                             direction = "UP" if variation >= 0 else "DOWN"
                             
-                            # Solo emitimos la señal y procesamos lógica si hay un mercado enganchado
                             if self.market_timer and self.on_signal:
                                 if asyncio.iscoroutinefunction(self.on_signal):
                                     await self.on_signal(self.last_price, variation, direction)
@@ -83,5 +89,5 @@ class ChainlinkRTDSFeed:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.warning(f"Desconexión de Binance WS: {e}. Reconectando en 3s...")
+                logger.warning(f"Desconexión de Coinbase WS: {e}. Reconectando en 3s...")
                 await asyncio.sleep(3.0)
