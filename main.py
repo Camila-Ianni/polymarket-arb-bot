@@ -367,7 +367,7 @@ class BotOrchestrator:
 
 if __name__ == "__main__":
     # Configurar logging inicial
-    setup_logging(log_level="INFO")
+    setup_logging(log_level="INFO", log_file_path="polymarket_bot.log")
     
     print("Fijando tamaño de apuesta en 0.69 USDC")
     order_size_usdc = 0.69

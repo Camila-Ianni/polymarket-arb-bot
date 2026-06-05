@@ -137,7 +137,10 @@ class MarketScanner:
                         logger.info(f"Mercado encontrado vía Gamma: {best_market[2]} (cierra en {best_market[0]:.0f}s)")
                         return best_market[1], best_market[2]
         except Exception as e:
+            err_msg = str(e).replace('Cannot connect to host ', '')[:50]
             logger.warning(f"Error en _fetch_gamma: {e}")
+            if self.dashboard:
+                self.dashboard.add_event(f"❌ Gamma API Error: {err_msg}")
         return None, ""
 
     async def _fetch_clob(self) -> Tuple[Optional[str], str]:
@@ -161,7 +164,10 @@ class MarketScanner:
                         logger.info(f"Mercado encontrado vía CLOB Fallback: {best_market[2]} (cierra en {best_market[0]:.0f}s)")
                         return best_market[1], best_market[2]
         except Exception as e:
+            err_msg = str(e).replace('Cannot connect to host ', '')[:50]
             logger.warning(f"Error en _fetch_clob: {e}")
+            if self.dashboard:
+                self.dashboard.add_event(f"❌ CLOB API Error: {err_msg}")
         return None, ""
 
     async def get_active_btc_5min_market(self) -> Tuple[Optional[Any], str]:
