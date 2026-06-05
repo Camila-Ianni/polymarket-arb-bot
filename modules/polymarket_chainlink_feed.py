@@ -38,31 +38,50 @@ class ChainlinkRTDSFeed:
 
     async def start(self):
         self._running = True
-        logger.info("Iniciando Chainlink RTDS Feed...")
-        # Simulación de WebSocket por si no tenemos la URL real
-        self._task = asyncio.create_task(self._mock_feed_loop())
+        logger.info("Iniciando Binance Live Feed (BTCUSDT)...")
+        self._task = asyncio.create_task(self._binance_feed_loop())
         
     async def stop(self):
         self._running = False
         if self._task:
             self._task.cancel()
-        logger.info("Chainlink RTDS Feed detenido.")
+        logger.info("Binance Live Feed detenido.")
 
-    async def _mock_feed_loop(self):
+    async def _binance_feed_loop(self):
         """
-        Bucle simulado que intercepta eventos del oráculo cada cierto tiempo
-        para no bloquear ni abrumar la consola.
+        Conecta al WebSocket de Binance para obtener precios reales de BTC en vivo.
+        Actualiza el estado interno para el Dashboard y emite señales si hay un mercado activo.
         """
+        ws_url = "wss://stream.binance.com:9443/ws/btcusdt@miniTicker"
+        
         while self._running:
-            await asyncio.sleep(2.0)
-            if self.market_timer:
-                import random
-                variation = random.uniform(-0.05, 0.05)
-                self.last_price *= (1 + (variation / 100))
-                direction = "UP" if variation >= 0 else "DOWN"
-                
-                if self.on_signal:
-                    if asyncio.iscoroutinefunction(self.on_signal):
-                        await self.on_signal(self.last_price, variation, direction)
-                    else:
-                        self.on_signal(self.last_price, variation, direction)
+            try:
+                async with websockets.connect(ws_url, ping_interval=10, ping_timeout=5) as ws:
+                    logger.debug("Conectado a Binance WebSocket (BTCUSDT)")
+                    while self._running:
+                        msg = await ws.recv()
+                        data = json.loads(msg)
+                        
+                        if "c" in data:
+                            new_price = float(data["c"])
+                            
+                            if self.last_price > 0:
+                                variation = ((new_price - self.last_price) / self.last_price) * 100
+                            else:
+                                variation = 0.0
+                                
+                            self.last_price = new_price
+                            direction = "UP" if variation >= 0 else "DOWN"
+                            
+                            # Solo emitimos la señal y procesamos lógica si hay un mercado enganchado
+                            if self.market_timer and self.on_signal:
+                                if asyncio.iscoroutinefunction(self.on_signal):
+                                    await self.on_signal(self.last_price, variation, direction)
+                                else:
+                                    self.on_signal(self.last_price, variation, direction)
+                                    
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Desconexión de Binance WS: {e}. Reconectando en 3s...")
+                await asyncio.sleep(3.0)
