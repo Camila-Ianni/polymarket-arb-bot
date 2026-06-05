@@ -99,7 +99,7 @@ class DashboardRenderer:
             wins = getattr(self.orchestrator.risk_manager.metrics, 'total_wins', 0)
             losses = getattr(self.orchestrator.risk_manager.metrics, 'total_losses', 0)
             
-        wallet_bal = 1.64 + float(pnl)
+        wallet_bal = 0.69 + float(pnl)
         
         metrics1 = f"  Wallet Bal : ${wallet_bal:.2f} (PnL: ${pnl}) | Execution Mode: FOK (Maker)"
         metrics2 = f"  Win/Loss   : {wins}W - {losses}L | Asset: BTC/USD 5m | Strat: EIP-712"
@@ -108,7 +108,7 @@ class DashboardRenderer:
         lines.append("╠" + "═" * (width - 2) + "╣")
         
         # Dinámica de Ronda
-        dyn1 = f"  Round      : #{round_info} | T-Minus: {t_minus}"
+        dyn1 = f"  Trades     : #{round_info} | T-Minus: {t_minus}"
         dyn2 = f"  BTC Price  : ${btc_price} | Capital: ${money_used} USDC"
         lines.append("║" + dyn1.ljust(width - 2) + "║")
         lines.append("║" + dyn2.ljust(width - 2) + "║")

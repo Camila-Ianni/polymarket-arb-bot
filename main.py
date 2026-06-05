@@ -272,15 +272,19 @@ class BotOrchestrator:
                             await asyncio.sleep(5)
                             
                             if hasattr(self, 'dashboard'):
-                                # Asumimos win en simulador para el flujo de Trust Wallet
-                                amount_won = self.order_size_usdc * 2
-                                self.dashboard.add_event("✅ ¡Resolución oficial recibida! Resultado: WIN")
-                                self.dashboard.add_event(f"💸 Reclamando y enviando ${amount_won:.2f} USDC a Trust Wallet...")
-                                self.dashboard.add_event(f"🏦 TX Transferencia: 0x{int(time.time())}abc... Completada")
-                                
-                                if hasattr(self, 'risk_manager') and self.risk_manager:
-                                    from decimal import Decimal
-                                    self.risk_manager.metrics.record_win(Decimal(str(self.order_size_usdc)))
+                                if self.config.execution.dry_run:
+                                    # Asumimos win en simulador para el flujo de Trust Wallet
+                                    amount_won = self.order_size_usdc * 2
+                                    self.dashboard.add_event("✅ ¡Resolución oficial recibida! Resultado: WIN")
+                                    self.dashboard.add_event(f"💸 Reclamando y enviando ${amount_won:.2f} USDC a Trust Wallet...")
+                                    self.dashboard.add_event(f"🏦 TX Transferencia: 0x{int(time.time())}abc... Completada")
+                                    
+                                    if hasattr(self, 'risk_manager') and self.risk_manager:
+                                        from decimal import Decimal
+                                        self.risk_manager.metrics.record_win(Decimal(str(self.order_size_usdc)))
+                                else:
+                                    self.dashboard.add_event("⚠️ [LIVE] Mercado cerrado. La resolución de UMA puede tardar 2-5 minutos.")
+                                    self.dashboard.add_event("🏦 [LIVE] Las ganancias deben ser reclamadas manualmente o con el bot de Claims.")
                         else:
                             if hasattr(self, 'dashboard'):
                                 self.dashboard.add_event("Mercado finalizado (Sin ejecuciones previas).")

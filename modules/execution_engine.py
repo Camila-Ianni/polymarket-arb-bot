@@ -95,15 +95,23 @@ class ExecutionEngine:
         buy_price_yes = round(max(min(current_price_yes + SLIPPAGE_TOLERANCE, 0.99), 0.01), 2)
         buy_price_no  = round(max(min(current_price_no  + SLIPPAGE_TOLERANCE, 0.99), 0.01), 2)
 
+        size_yes = round(self.order_size_usdc / buy_price_yes, 2)
+        size_no  = round(self.order_size_usdc / buy_price_no, 2)
+        
+        # FIX: Advertir al usuario si el tamaño es menor al límite de Polymarket (5 shares)
+        if hasattr(self, 'dashboard') and self.dashboard is not None:
+            if size_yes < 5.0 or size_no < 5.0:
+                self.dashboard.add_event(f"⚠️ [RIESGO] Tamaño {min(size_yes, size_no)} shares < 5. ¡Poly API puede rechazar!")
+
         order_args_yes = OrderArgs(
             price=buy_price_yes,
-            size=round(self.order_size_usdc / buy_price_yes, 2),
+            size=size_yes,
             side=BUY,
             token_id=ctx.token_id_yes,
         )
         order_args_no = OrderArgs(
             price=buy_price_no,
-            size=round(self.order_size_usdc / buy_price_no, 2),
+            size=size_no,
             side=BUY,
             token_id=ctx.token_id_no,
         )
